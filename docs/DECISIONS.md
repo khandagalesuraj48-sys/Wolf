@@ -56,8 +56,16 @@ Every decision here is the owner's. The newest wins. Nothing is built that is no
   sagle houn jail"): the whole application on one branch, one pull request, and one master SQL (`supabase/FALCON_MASTER.sql`,
   tested on a clean database) with the seed apart.
 
+* **The database is in** (23-11-2026): he ran `FALCON_MASTER.sql` and the seed on FALCON's own new Supabase project; the check
+  of tables without Row Level Security answered 0.
+* **FALCON stays fully separate at the start** ("surwatila falcon he purn seprate asel erp madhe lagech nahi hodaych … mi sangel
+  tewa jodu code banla asel tr thik ahe"): it is not joined to LION / the Portal / HR now – no `PORTAL_URL`, no HR look-up. The
+  code for joining stays as it is and is switched on only when he says. Everybody signs in to FALCON with its own WhatsApp code.
+
 ## Not decided yet – asked before that part is built
-1. **Portal side of the one sign-in:** adding the module `falcon` in the Portal (Super Admin → Modules) and what its ticket
+0. **The first System Admin while FALCON is separate:** without the Portal nobody can be made System Admin from inside FALCON
+   (only a System Admin gives roles). A way for the first one is needed before the office pages can be used.
+1. **Portal side of the one sign-in (later – when he joins it):** adding the module `falcon` in the Portal (Super Admin → Modules) and what its ticket
    carries; where FALCON's finer roles (Mess Owner … System Admin) are given – in the Portal's Users & Access, as HR's are, or in
    FALCON. A change in `rcl-portal` is its own piece of work.
 2. **HR look-up:** the RCL ID check and the "present today" count need a small read-only answer from HR's server (`rcl-hr`) –
