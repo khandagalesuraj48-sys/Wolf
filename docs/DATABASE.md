@@ -1,0 +1,52 @@
+# FALCON – the database (one master SQL)
+
+## What there is
+
+* `supabase/migrations/0001…0012_*.sql` – the source, part by part (each safe to run again):
+
+| Part | What it makes |
+|---|---|
+| 0001 foundation | companies, sites, circles, sections, people, guest profiles, dated role grants, phones, dated settings, the append-only audit log; `me()`, `has_role()` … |
+| 0002 mess and contracts | contractors (bank details apart), their papers, messes, items, work orders, rates with dates (one approved rate a day), penalties, GST / TDS rules, meal times, menus |
+| 0003 orders | orders and their lines (one main meal a person a meal a day), guests' visits, the five kinds of confirmation, delivery codes, reviews |
+| 0004 delivery | vans, batches by section, stops with ETAs, the van's place only while on the way, hand-over with the code, short, failed |
+| 0005 complaints and closing | complaints (reply time, action, found true, penalty), the day's closing and lock, corrections kept |
+| 0006 billing | the month's bill from confirmed lines of locked days × that day's rate; GST / TDS from Accounts' rules; retention, advance, penalties; the invoice checked line by line; approvals by different people; ERP posting; payment with its UTR |
+| 0007 registration | registrations and the Site Admin's decisions; the LION sign-in's tickets used once; the RCL-ID start; linking without a second record |
+| 0008 notifications | the in-app notices and the daily alerts |
+| 0009 storage | the five private buckets and who may put / read a file |
+| 0010 realtime | the live tables |
+| 0011 app helpers | the screens' read functions (my van, the kitchen's list, the follow-up calls, the office's numbers …) |
+| 0012 admin | a dated setting changed by the System Admin (`set_setting`) |
+
+* `supabase/FALCON_MASTER.sql` – **the one script to run**, built from the parts by `supabase/build_master.sh` (never edited by
+  hand), inside one transaction: all or nothing.
+* `supabase/seed/seed.sql` – apart from the master: the company RCL and the items of a bill (the four meals, guest meal, parcel
+  packing, water 1 L). No person, rate, tax rule, site or money.
+
+## Running it (his step)
+
+1. Supabase → the `falcon` project → **SQL Editor → New query**.
+2. Paste the whole of `supabase/FALCON_MASTER.sql` → **Run**. It ends with `commit`. If it stops with an error, nothing of it
+   stays – send the error (no key is in it) and run it again after the fix.
+3. A new query: paste `supabase/seed/seed.sql` → **Run**. Its last lines show the seven items.
+4. Check (read only): `select count(*) from pg_tables where schemaname = 'public' and not rowsecurity;` → **0** (every table has
+   Row Level Security).
+
+It deletes nothing, changes no row that is there, and may be run again (a second run changes nothing).
+
+## How it was tested (before he is asked to run it)
+
+`supabase/test/run_master.sh` on a new, clean, throwaway Postgres 16 with a stand-in of Supabase's `auth`, `storage`, roles and
+Realtime publication (`supabase/test/00_supabase_stub.sql`): the master run once, run again, the seed run twice, then every test
+file against that database – see `docs/TEST_REPORT.md`. The stand-in is not Supabase itself: the first run on the real project is
+his, and the checks above confirm it.
+
+## Rules the database keeps by itself
+
+* Row Level Security on every table; the browser's key may read only what the person's roles allow, and changes go through
+  checked functions (`security definer`, `search_path = ''`). Nothing is deleted through the API.
+* Every change is in `audit_log` (who, when, before, after, how, reason); nobody changes or deletes a line of it.
+* A locked day is not changed – a correction is a new row, kept with its reason.
+* Money is counted from confirmed lines only; a rate, a meal time, a setting and a tax rule each have their dates, and a day is
+  always counted with the version of that day. No GST / TDS number is in the code.

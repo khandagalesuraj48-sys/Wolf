@@ -83,3 +83,15 @@ export function useAct() {
   }, []);
   return { busy, error, run, setError };
 }
+
+// The company's dated settings of one day (a value starts on its date; the one before it ended the day before).
+export function useSettings(keys: string[], date: string): Load<Record<string, unknown>> {
+  return useLoad(async () => {
+    const r = await rows<{ key: string; value: unknown }>(db().from('settings').select('key,value').is('site_id', null).in('key', keys)
+      .lte('valid_from', date).or('valid_to.is.null,valid_to.gte.' + date));
+    return Object.fromEntries(r.map((x) => [x.key, x.value]));
+  }, [keys.join(','), date]);
+}
+export const settingNum = (s: Record<string, unknown> | undefined, key: string, def: number) => {
+  const v = Number(s?.[key]); return Number.isFinite(v) && s?.[key] != null ? v : def;
+};

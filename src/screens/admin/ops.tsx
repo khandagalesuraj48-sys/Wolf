@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { call, db, rows, useAct, useLoad } from '../../lib/db';
+import { call, db, rows, settingNum, useAct, useLoad, useSettings } from '../../lib/db';
 import { useSession } from '../../lib/session';
 import { day, dayLong, inr, leftText, num, time, today } from '../../lib/fmt';
 import { Icon } from '../../ui/Icon';
@@ -246,27 +246,62 @@ export function Analytics() {
   );
 }
 
+// The measures and weights of the board; the weights are dated settings of the System Admin (Settings), these are only the
+// values until he sets them.
+export const SCORE_KEYS = ['scorecard.w_rating', 'scorecard.w_time', 'scorecard.w_complaints', 'scorecard.w_billing', 'scorecard.w_papers'];
 export function Scorecard() {
+  const [month, setMonth] = useState(today().slice(0, 7));
+  const from = month + '-01';
+  const end = new Date(from + 'T12:00:00+05:30'); end.setMonth(end.getMonth() + 1); end.setDate(0);
+  const to = end.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) < today() ? end.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) : today();
   const messes = useMesses();
-  const from = today().slice(0, 8) + '01', to = today();
-  const rat = useLoad(() => call<{ mess_id: string; reviews: number; overall: number }[]>('office_ratings', { p_from: from, p_to: to }), []);
-  const del = useLoad(() => call<{ mess_id: string; stops: number; on_time: number }[]>('office_delivery', { p_from: from, p_to: to }), []);
-  const comp = useLoad(() => rows<{ mess_id: string; found_true: boolean | null }>(db().from('complaints').select('mess_id,found_true').gte('created_at', from)), []);
+  const set = useSettings(SCORE_KEYS, to);
+  const W = { rating: settingNum(set.data, SCORE_KEYS[0]!, 25), time: settingNum(set.data, SCORE_KEYS[1]!, 25), complaints: settingNum(set.data, SCORE_KEYS[2]!, 20),
+    billing: settingNum(set.data, SCORE_KEYS[3]!, 15), papers: settingNum(set.data, SCORE_KEYS[4]!, 15) };
+  const rat = useLoad(() => call<{ mess_id: string; reviews: number; overall: number }[]>('office_ratings', { p_from: from, p_to: to }), [from, to]);
+  const del = useLoad(() => call<{ mess_id: string; stops: number; on_time: number }[]>('office_delivery', { p_from: from, p_to: to }), [from, to]);
+  const comp = useLoad(() => rows<{ mess_id: string; found_true: boolean | null }>(db().from('complaints').select('mess_id,found_true').gte('created_at', from).lte('created_at', to + 'T23:59:59+05:30')), [from, to]);
+  const bills = useLoad(() => rows<{ mess_id: string; month: string; taxable: number; invoice_amount: number | null }>(db().from('monthly_bills').select('mess_id,month,taxable,invoice_amount').not('recon', 'is', null).lte('month', from).order('month', { ascending: false })), [from]);
+  const docs = useLoad(() => rows<{ contractor_id: string; state: string; valid_to: string | null }>(db().from('contractor_documents').select('contractor_id,state,valid_to').neq('state', 'rejected')), []);
   const st = useStats(from, to);
-  const W = { rating: 25, time: 25, complaints: 20, billing: 15, papers: 15 };
-  const score = (id: string) => {
-    const r = (rat.data || []).find((x) => x.mess_id === id), d = (del.data || []).find((x) => x.mess_id === id);
-    const meals = sum((st.data || []).filter((x) => x.mess_id === id), 'meals'), trueC = (comp.data || []).filter((x) => x.mess_id === id && x.found_true).length;
-    const parts = { rating: r ? (r.overall / 5) * W.rating : null, time: d?.stops ? (d.on_time / d.stops) * W.time : null, complaints: meals ? Math.max(0, W.complaints - (trueC * 1000 / meals) * 5) : null };
-    return { parts, r, d, trueC };
+  const score = (m: { id: string; contractor_id: string | null }) => {
+    const r = (rat.data || []).find((x) => x.mess_id === m.id), d = (del.data || []).find((x) => x.mess_id === m.id);
+    const meals = sum((st.data || []).filter((x) => x.mess_id === m.id), 'meals'), trueC = (comp.data || []).filter((x) => x.mess_id === m.id && x.found_true).length;
+    const b = (bills.data || []).find((x) => x.mess_id === m.id && x.invoice_amount != null);
+    const over = b && Number(b.taxable) > 0 ? ((Number(b.invoice_amount) - Number(b.taxable)) / Number(b.taxable)) * 100 : null;
+    const ds = (docs.data || []).filter((x) => x.contractor_id === m.contractor_id);
+    const good = ds.filter((x) => x.state === 'verified' && (!x.valid_to || x.valid_to >= to)).length, asked = ds.filter((x) => x.state === 'asked').length;
+    const parts = {
+      rating: r ? (r.overall / 5) * W.rating : null,
+      time: d?.stops ? (d.on_time / d.stops) * W.time : null,
+      complaints: meals ? Math.max(0, W.complaints - ((trueC * 1000) / meals) * 5) : null,
+      billing: over != null ? Math.max(0, W.billing * (1 - Math.max(0, over) / 6)) : null,
+      papers: ds.length ? (good / ds.length) * W.papers : null };
+    const known = Object.values(parts).filter((v): v is number => v != null);
+    return { parts, r, d, trueC, over, ds: ds.length, good, asked, total: known.length ? Math.round(known.reduce((t, v) => t + v, 0)) : null,
+      out: Object.entries(parts).filter(([, v]) => v != null).reduce((t, [k]) => t + W[k as keyof typeof W], 0) };
   };
+  const list = (messes.data || []).map((m) => ({ m, x: score(m) }));
+  const f = (v: number | null) => (v == null ? '–' : String(Math.round(v)));
+  const loading = [messes, rat, del, comp, bills, docs, st].some((l) => l.loading && !l.data);
   return (
-    <Web title="Contractor scorecard" roles={['system_admin', 'management', 'site_admin', 'accounts']} actions={<button className="wbtn" onClick={() => window.print()}><Icon name="printer" size={16} />PDF for the review meeting</button>}>
-      <div className="wcard" style={{ padding: '8px 8px 0' }}>
-        <Tbl head={['Mess · contractor', 'Ratings (25)', 'On time (25)', 'Complaints found true (20)', 'Billing accuracy (15)', 'Papers (15)']}
-          rows={(messes.data || []).map((m) => { const x = score(m.id); const f = (v: number | null) => (v == null ? '–' : Math.round(v)); return [<b>{m.name} · {m.contractors?.name || '–'}</b>, x.r ? x.r.overall + ' · ' + f(x.parts.rating) : '–', x.d?.stops ? Math.round((100 * x.d.on_time) / x.d.stops) + '% · ' + f(x.parts.time) : '–', x.trueC + ' · ' + f(x.parts.complaints), 'from the invoice check', 'from the documents']; })} />
-      </div>
-      <div className="row xs" style={{ gap: 8 }}><Icon name="info" size={14} /><span className="sp">The weights are those of the design and can be changed by the Super Admin as a dated setting. A score only shows – it never changes a bill by itself.</span></div>
+    <Web title={'Contractor scorecard · ' + new Date(from + 'T12:00:00+05:30').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })} roles={['system_admin', 'management', 'site_admin', 'accounts']}
+      actions={<><input className="wbtn" type="month" value={month} max={today().slice(0, 7)} onChange={(e) => setMonth(e.target.value)} aria-label="Month" /><button className="wbtn" onClick={() => window.print()}><Icon name="printer" size={16} />PDF for the review meeting</button></>}>
+      {loading ? <Loading /> : <>
+        <div className="g2">{list.map(({ m, x }) => <div key={m.id} className="wcard"><div className="row" style={{ gap: 12 }}><div className="tile s40 leaf"><Icon name="chef-hat" /></div><div className="sp"><b style={{ fontSize: 17 }}>{m.contractors?.name || '–'}</b><div className="xs">{m.name}</div></div>
+          <div style={{ textAlign: 'right' }}><b style={{ fontSize: 34, letterSpacing: '-.02em' }}>{x.total ?? '–'}</b><div className="xs">of {x.out || 100}</div></div></div></div>)}</div>
+        <div className="wcard" style={{ padding: '8px 8px 0' }}>
+          <Tbl head={['Measure', 'From where', 'Weight', ...list.map(({ m }) => m.contractors?.name || m.name)]} right={[2, ...list.map((_, i) => i + 3)]} hl={(i) => i === 5}
+            rows={[
+              [<><b>Ratings</b> · taste, quantity, hot</>, <span className="xs">people's ratings after the meal</span>, W.rating, ...list.map(({ x }) => x.r ? x.r.overall + ' of 5 · ' + f(x.parts.rating) : '–')],
+              [<><b>On time</b> · parcels</>, <span className="xs">van reached time against its time</span>, W.time, ...list.map(({ x }) => x.d?.stops ? Math.round((100 * x.d.on_time) / x.d.stops) + '% · ' + f(x.parts.time) : '–')],
+              [<><b>Complaints</b> found true</>, <span className="xs">complaint dashboard · 5 points less for each one in 1,000 meals</span>, W.complaints, ...list.map(({ x }) => x.parts.complaints != null ? x.trueC + ' · ' + f(x.parts.complaints) : '–')],
+              [<b>Billing accuracy</b>, <span className="xs">invoice vs system, the last checked bill · a sixth less for each 1% over</span>, W.billing, ...list.map(({ x }) => x.over != null ? (x.over > 0 ? x.over.toFixed(1) + '% over' : 'no excess') + ' · ' + f(x.parts.billing) : '–')],
+              [<><b>Documents</b> valid</>, <span className="xs">FSSAI, licences, medical fitness – verified and in date</span>, W.papers, ...list.map(({ x }) => x.ds ? (x.good === x.ds ? 'all valid' : x.asked ? x.asked + ' asked, not given' : (x.ds - x.good) + ' not valid') + ' · ' + f(x.parts.papers) : '–')],
+              [<b>Score</b>, '', <b>{W.rating + W.time + W.complaints + W.billing + W.papers}</b>, ...list.map(({ x }) => <b>{x.total ?? '–'}</b>)]]} />
+        </div>
+        <div className="row xs" style={{ gap: 8 }}><Icon name="info" size={14} /><span className="sp">The weights are a setting of the System Admin with a date (Settings). A measure without data yet ("–") is left out of the score. A score only shows – it never changes a bill by itself.</span></div>
+      </>}
     </Web>
   );
 }

@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { call, db, one, rows, useAct, useLoad } from '../lib/db';
+import { call, db, one, rows, settingNum, useAct, useLoad, useSettings } from '../lib/db';
 import { useSession } from '../lib/session';
 import { day, dayLong, inr, initials, leftText, maskMobile, mealIcon, mealName, MEALS, monthName, nowHM, time, today, type Meal } from '../lib/fmt';
 import { Icon } from '../ui/Icon';
@@ -339,7 +339,7 @@ export function BatchDriver() {
   );
 }
 
-// ── o08 · Route (by chainage; times estimated from the site's speed setting) ──
+// ── o08 · Route (by chainage; times suggested from the dated settings "van speed" and "minutes a stop" – the owner may change the order) ──
 export function BatchRoute() {
   const { id } = useParams();
   const nav = useNavigate();
@@ -349,7 +349,8 @@ export function BatchRoute() {
   const stops = bt.data?.stops || [];
   const seq = order || stops.map((s) => s.section_id);
   const list = seq.map((sid) => stops.find((s) => s.section_id === sid)!).filter(Boolean);
-  const speed = 30, stopMin = 4;            // km/h and minutes a stop – used only to suggest ETAs; the van's real times are kept
+  const set = useSettings(['delivery.speed_kmh', 'delivery.stop_minutes'], today());
+  const speed = Math.max(5, settingNum(set.data, 'delivery.speed_kmh', 30)), stopMin = Math.max(0, settingNum(set.data, 'delivery.stop_minutes', 4));   // only to suggest ETAs; the van's real times are kept
   let km = 0, prev = 0; const start = Date.now();
   const plan = list.map((s, i) => { const k2 = s.sections.km ?? prev; km += Math.abs(k2 - prev); prev = k2; return { s, eta: new Date(start + ((km / speed) * 60 + i * stopMin) * 60000) }; });
   const mins = Math.round((km / speed) * 60 + list.length * stopMin);

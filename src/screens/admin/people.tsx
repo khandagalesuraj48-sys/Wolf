@@ -212,23 +212,38 @@ export function PeopleRoles() {
 }
 
 // ── settings ──
-const KEYS: { key: string; label: string; unit: string; def: number }[] = [
-  { key: 'complaint.reply_minutes', label: 'A complaint is answered within', unit: 'minutes', def: 30 },
-  { key: 'delivery.late_minutes', label: 'A van is late after its time by more than', unit: 'minutes', def: 30 }];
+// A complaint's answer time is one setting with two values: {"serious": minutes, "normal": minutes} (0005 reply_minutes).
+const REPLY = 'complaint.reply_minutes';
+const KEYS: { key: string; label: string; unit: string; def: number | string }[] = [
+  { key: REPLY, label: 'A complaint is answered within (serious / other)', unit: 'minutes', def: '60 / 360' },
+  { key: 'delivery.late_minutes', label: 'A van is late after its time by more than', unit: 'minutes', def: 30 },
+  { key: 'delivery.speed_kmh', label: 'Van speed for the suggested route times', unit: 'km/h', def: 30 },
+  { key: 'delivery.stop_minutes', label: 'Minutes a stop for the suggested route times', unit: 'minutes', def: 4 },
+  { key: 'scorecard.w_rating', label: 'Scorecard weight · ratings', unit: 'points', def: 25 },
+  { key: 'scorecard.w_time', label: 'Scorecard weight · on time', unit: 'points', def: 25 },
+  { key: 'scorecard.w_complaints', label: 'Scorecard weight · complaints found true', unit: 'points', def: 20 },
+  { key: 'scorecard.w_billing', label: 'Scorecard weight · billing accuracy', unit: 'points', def: 15 },
+  { key: 'scorecard.w_papers', label: 'Scorecard weight · documents valid', unit: 'points', def: 15 }];
 export function Settings() {
   const s = useSession();
   const items = useLoad(() => rows<{ id: string; code: string; name: string; kind: string; meal: string | null; unit: string; active: boolean }>(db().from('items').select('*').order('kind').order('code')), []);
   const sets = useLoad(() => rows<{ id: string; key: string; value: unknown; valid_from: string; valid_to: string | null; note: string | null }>(db().from('settings').select('id,key,value,valid_from,valid_to,note').is('site_id', null).order('key').order('valid_from', { ascending: false })), []);
   const taxes = useLoad(() => s.has(['accounts', 'system_admin', 'management', 'site_admin']) ? rows<{ id: string; tax: string; applies_to: string; section: string | null; rate: number; valid_from: string; valid_to: string | null; checked_by_ca: boolean; ca_note: string | null }>(db().from('tax_rules').select('*').order('tax').order('valid_from', { ascending: false })) : Promise.resolve([]), []);
   const [it, setIt] = useState({ code: '', name: '', kind: 'extra', meal: 'lunch', unit: 'each' });
-  const [st, setSt] = useState({ key: KEYS[0].key, value: '', from: today(1), note: '' });
+  const [st, setSt] = useState({ key: KEYS[0]!.key, value: '', other: '', from: today(1), note: '' });
   const [tx, setTx] = useState({ tax: 'gst', applies: 'mess_services', section: '', rate: '', from: '', ca: false, note: '' });
   const a = useAct();
   const sysadm = s.has('system_admin');
   const acc = s.has('accounts');
   const addItem = () => a.run(async () => { const { error } = await db().from('items').insert({ company_id: s.me!.company_id, code: it.code, name: it.name, kind: it.kind, meal: it.kind === 'meal' ? it.meal : null, unit: it.unit }); if (error) throw new Error(error.message); setIt({ ...it, code: '', name: '' }); items.reload(); });
   const flip = (id: string, active: boolean) => a.run(async () => { const { error } = await db().from('items').update({ active: !active }).eq('id', id); if (error) throw new Error(error.message); items.reload(); });
-  const setOne = () => a.run(async () => { await call('set_setting', { p_key: st.key, p_value: Number(st.value), p_from: st.from, p_note: st.note || null }); setSt({ ...st, value: '', note: '' }); sets.reload(); });
+  const setOne = () => a.run(async () => {
+    const n = Number(st.value), o = Number(st.other);
+    if (!Number.isFinite(n) || n < 0 || (st.key === REPLY && (!Number.isFinite(o) || o < 0))) throw new Error('Write a number.');
+    await call('set_setting', { p_key: st.key, p_value: st.key === REPLY ? { serious: n, normal: o } : n, p_from: st.from, p_note: st.note || null });
+    setSt({ ...st, value: '', other: '', note: '' }); sets.reload();
+  });
+  const shown = (key: string, v: unknown) => (v && typeof v === 'object' ? Object.entries(v as Record<string, unknown>).map(([k, x]) => (k === 'normal' ? 'other' : k) + ' ' + x).join(' · ') : String(v)) + ' ' + (KEYS.find((k) => k.key === key)?.unit || '');
   const addTax = () => a.run(async () => {
     const cur = (taxes.data || []).find((x) => x.tax === tx.tax && x.applies_to === tx.applies && !x.valid_to);
     if (cur && cur.valid_from >= tx.from) throw new Error('The new rule must start after ' + day(cur.valid_from) + '.');
@@ -241,11 +256,13 @@ export function Settings() {
       <ErrorLine error={a.error} />
       <div className="g2">
         <div className="wcard"><h3>Dated settings</h3>
-          <Tbl head={['Setting', 'Value', 'From', 'Till']} rows={(sets.data || []).map((x) => [KEYS.find((k) => k.key === x.key)?.label || x.key, String(x.value) + ' ' + (KEYS.find((k) => k.key === x.key)?.unit || ''), day(x.valid_from), x.valid_to ? day(x.valid_to) : '–'])}
-            empty={'Nothing set – ' + KEYS.map((k) => k.def + ' ' + k.unit + ' (' + k.key + ')').join(', ') + ' are used until a value is set'} />
+          <Tbl head={['Setting', 'Value', 'From', 'Till']} rows={(sets.data || []).map((x) => [KEYS.find((k) => k.key === x.key)?.label || x.key, shown(x.key, x.value), day(x.valid_from), x.valid_to ? day(x.valid_to) : '–'])}
+            empty="Nothing set yet – the values below are used until one is set" />
+          <div className="xs" style={{ marginTop: 6 }}>Until set: {KEYS.map((k) => k.label.toLowerCase() + ' ' + k.def + ' ' + k.unit).join(' · ')}.</div>
           {sysadm && <div className="row wrap" style={{ gap: 8, marginTop: 10 }}><select className="winp" value={st.key} onChange={(e) => setSt({ ...st, key: e.target.value })} aria-label="Setting">{KEYS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}</select>
-            <Input value={st.value} onChange={(v) => setSt({ ...st, value: v })} placeholder="Minutes" inputMode="numeric" /><input className="winp" type="date" min={today()} value={st.from} onChange={(e) => setSt({ ...st, from: e.target.value })} aria-label="From" /><Input value={st.note} onChange={(v) => setSt({ ...st, note: v })} placeholder="Note" />
-            <button className="wbtn pri" onClick={setOne} disabled={!st.value || a.busy}>New value from this date</button></div>}
+            <Input value={st.value} onChange={(v) => setSt({ ...st, value: v })} placeholder={st.key === REPLY ? 'Serious · minutes' : KEYS.find((k) => k.key === st.key)?.unit || 'Value'} inputMode="numeric" />
+            {st.key === REPLY && <Input value={st.other} onChange={(v) => setSt({ ...st, other: v })} placeholder="Other · minutes" inputMode="numeric" />}<input className="winp" type="date" min={today()} value={st.from} onChange={(e) => setSt({ ...st, from: e.target.value })} aria-label="From" /><Input value={st.note} onChange={(v) => setSt({ ...st, note: v })} placeholder="Note" />
+            <button className="wbtn pri" onClick={setOne} disabled={!st.value || (st.key === REPLY && !st.other) || a.busy}>New value from this date</button></div>}
         </div>
         <div className="wcard"><h3>GST and TDS – Accounts' rules with dates</h3>
           <Tbl head={['Tax', 'For', 'Section', 'Rate', 'From', 'Till', 'CA']} right={[3]} rows={(taxes.data || []).map((x) => [x.tax.toUpperCase(), x.applies_to.replace('_', ' '), x.section || '–', x.rate + '%', day(x.valid_from), x.valid_to ? day(x.valid_to) : '–', x.checked_by_ca ? <span className="chip leaf" style={{ height: 24 }}>checked</span> : <span className="chip amber" style={{ height: 24 }}>not yet</span>])} empty="No rule yet – a bill cannot be made without the GST rule and the TDS rule of the contractor's kind" />
