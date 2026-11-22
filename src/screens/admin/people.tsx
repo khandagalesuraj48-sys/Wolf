@@ -304,7 +304,7 @@ export function HrPeople() {
   const now = () => a.run(async () => { await api('/api/hr-sync', {}); st.reload(); list.reload(); });
   const l = st.data?.last;
   const sites = st.data?.sites || [];
-  const tone = (x: HrRow) => (x.gone || x.status === 'left' ? 'red' : x.status === 'active' ? 'leaf' : 'amber');
+  const tone = (x: HrRow) => (x.gone || x.status === 'left' ? 'red' : x.status === 'active' || x.status === 'pending' ? 'leaf' : 'amber');
   return (
     <Web title="Employees from HR" roles={['system_admin', 'site_admin', 'management']}
       actions={<><select className="wbtn" value={site} onChange={(e) => setSite(e.target.value)} aria-label="Site"><option value="">All sites</option>{sites.map((x) => <option key={x.site || '-'} value={x.site || ''}>{x.site || '(no site)'}</option>)}</select>
@@ -312,7 +312,7 @@ export function HrPeople() {
         {s.has('system_admin') && <button className="wbtn pri" onClick={now} disabled={a.busy}><Icon name="refresh-cw" size={16} />Bring from HR now</button>}</>}>
       <ErrorLine error={a.error} />
       {st.error ? <Failed error={st.error} retry={st.reload} /> : <div className="kpis">
-        <Kpi label="In HR · not left" value={numOf(sites.reduce((t, x) => t + x.active, 0))} note={sites.length + ' sites · ' + numOf(sites.reduce((t, x) => t + x.other, 0)) + ' still pending in HR'} tone="leaf" />
+        <Kpi label="In HR · not left" value={numOf(sites.reduce((t, x) => t + x.active, 0))} note={sites.length + ' sites · ' + numOf(sites.reduce((t, x) => t + x.other, 0)) + ' not yet activated in HR'} tone="leaf" />
         <Kpi label="Already in FALCON" value={numOf(sites.reduce((t, x) => t + x.in_falcon, 0))} note="they sign in with their mobile" />
         <Kpi label="Left in HR" value={numOf(sites.reduce((t, x) => t + x.left, 0))} note="stopped in FALCON" tone="red" />
         <Kpi label="Last copy" value={st.data?.last_ok ? day(st.data.last_ok) + ' ' + time(st.data.last_ok) : 'not yet'} tone={l && !l.ok ? 'red' : 'muted'}
@@ -322,11 +322,13 @@ export function HrPeople() {
         {list.loading && !list.data ? <Loading /> : list.error ? <Failed error={list.error} retry={list.reload} /> :
           <Tbl head={['RCL ID', 'Name', 'Designation', 'Site', 'Mobile', 'In HR', 'In FALCON']} empty={st.data?.last_ok ? 'Nobody matches' : 'HR\'s list has not come yet – it comes every hour once HR is connected (docs/DEPLOYMENT.md)'}
             rows={(list.data || []).map((x) => [<b>{x.rcl_id || '–'}</b>, x.full_name, x.designation || x.category || '–', x.site_code || '–', x.mobile || '–',
-              <span className={'chip ' + tone(x)} style={{ height: 24 }}>{x.gone ? 'not in HR now' : x.status === 'left' ? 'left ' + day(x.left_on) : x.status}</span>,
+              <span className={'chip ' + tone(x)} style={{ height: 24 }}>{x.gone ? 'not in HR now' : x.status === 'left' ? 'Relieved ' + day(x.left_on) : HR_WORD[x.status] || x.status}</span>,
               x.in_falcon ? <span className={'chip ' + (x.in_falcon === 'suspended' ? 'red' : 'leaf')} style={{ height: 24 }}>{x.in_falcon}</span> : <span className="xs">signs in with his mobile</span>])} />}
       </div>
-      <div className="row xs" style={{ gap: 8 }}><Icon name="shield-check" size={14} /><span className="sp">HR stays the master – nothing here changes HR. Only RCL ID, name, designation, category, site, mobile and status come from HR; never birth date, e-mail, KYC, bank, pay or photo. Everybody in HR's list who has not left can sign in with his mobile – HR's "pending" / "incomplete" is only shown. A new site of HR comes by itself; who left in HR cannot order meals.</span></div>
+      <div className="row xs" style={{ gap: 8 }}><Icon name="shield-check" size={14} /><span className="sp">HR stays the master – nothing here changes HR. Only RCL ID, name, designation, category, site, mobile and status come from HR; never birth date, e-mail, KYC, bank, pay or photo. Everybody in HR's list who has not left can sign in with his mobile – HR's "Incomplete" / "Complete" (not yet activated) is only shown. A new site of HR comes by itself; who left in HR cannot order meals.</span></div>
     </Web>
   );
 }
 const numOf = (n: number) => n.toLocaleString('en-IN');
+// HR's own words for its statuses (rcl-hr public/hr.js STATUS) – FALCON shows what HR's pages show, never HR's inner names.
+const HR_WORD: Record<string, string> = { incomplete: 'Incomplete', pending: 'Complete', active: 'Active', left: 'Relieved' };
