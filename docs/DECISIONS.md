@@ -52,6 +52,9 @@ Every decision here is the owner's. The newest wins. Nothing is built that is no
   * **everybody else** (not verified yet, temporary, guest) signs in to FALCON itself with a WhatsApp code;
   * FALCON also runs on its own (its own address and app) – from inside LION it is one sign-in.
 * `main` began with one commit (the README) on his yes; everything after it comes as a branch and a pull request.
+* **Everything together, then one pull request and one SQL** ("ho ata tu ek sath sagle baanaw nantr pr ani sql de mhanje ekdach
+  sagle houn jail"): the whole application on one branch, one pull request, and one master SQL (`supabase/FALCON_MASTER.sql`,
+  tested on a clean database) with the seed apart.
 
 ## Not decided yet – asked before that part is built
 1. **Portal side of the one sign-in:** adding the module `falcon` in the Portal (Super Admin → Modules) and what its ticket
