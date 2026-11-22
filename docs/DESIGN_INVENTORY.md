@@ -124,10 +124,10 @@ Role: Employee (first time) · Guest
 | Icons – Lucide | every screen | SVG, 24 grid, 2 px stroke | yes | yes (`src/styles/icons.css`, from lucide-static) | ISC licence; the same icon names in the app |
 | Road maps (circles A–C, sections, van, pins) | e09, o08, o10, d05, w01, w02 | 5 drawn SVGs | yes – as the layout | yes – drawn from the sections' km (`src/ui/RoadMap.tsx`) | stand-ins for the live map (Google Maps, decision 4); the pins, van and route line keep the design |
 | Photo areas (complaint photos, selfie, menu poster) | e07, e14, o14, w14, r07 | the person's own photo | yes | yes – the camera / file, kept in private storage | the real photo the person takes – no stock picture |
-| FALCON mark in the header and sidebar | every screen | – | **missing** | the utensils tile, as on the boards | the design shows the word FALCON with the utensils mark in a navy tile until he gives the logo |
+| FALCON logo – B: a peregrine falcon on a gold-rimmed plate, a fork and a knife crossed behind | browser tab, phone home screen (web), r01 header, office sidebar; the Android app's icon and opening screen | SVG + PNG (`public/brand/`; the app: FALCONAPK `android/…/res`, `assets/brand/`) | yes – his pick "B OK AAHE", 23-11-2026 (options A and B shown as pictures) | yes | drawn for FALCON (no stock picture); light ivory ground – his word "dark madhe nko" |
 
 ## Missing – to be given by him
 
-* The FALCON logo (app icon, splash, sidebar, browser tab, notifications).
+* Nothing at present (the logo: given 23-11-2026 – B).
 
 Total: 71 screens.

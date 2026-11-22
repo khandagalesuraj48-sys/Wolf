@@ -14,7 +14,7 @@ const server = http.createServer((req, res) => {
   let f = path.join(dist, p);
   if (!f.startsWith(dist) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) f = path.join(dist, 'index.html');
   const ext = path.extname(f);
-  const type = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.json': 'application/json', '.webmanifest': 'application/manifest+json' }[ext] || 'application/octet-stream';
+  const type = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.png': 'image/png' }[ext] || 'application/octet-stream';
   res.writeHead(200, { 'content-type': type }); fs.createReadStream(f).pipe(res);
 });
 
@@ -73,6 +73,10 @@ const ROUTES = ['/', '/start', '/start/rcl-id', '/start/new', '/guest/new', '/ap
     page.on('console', (m) => { if (m.type() === 'error' && !/WebSocket|realtime|Failed to load resource|ERR_FAILED|net::/i.test(m.text())) errs.push('console: ' + m.text().slice(0, 200)); });
     await page.goto('http://127.0.0.1:4179' + p, { waitUntil: 'networkidle', timeout: 20000 }).catch((e) => errs.push('goto: ' + e.message));
     await page.waitForTimeout(400);
+    // every picture of the page is there (the logo of 23-11-2026 too)
+    const broken = await page.evaluate(() => [...document.images].filter((i) => i.complete && i.naturalWidth === 0).map((i) => i.getAttribute('src'))).catch(() => []);
+    for (const b of broken) errs.push('picture not found: ' + b);
+    if (process.env.SMOKE_SHOTS && ['/start', '/admin'].includes(p)) await page.screenshot({ path: path.join(process.env.SMOKE_SHOTS, (p.slice(1) || 'root').replace(/\//g, '_') + '.png') });
     const text = (await page.evaluate(() => document.body.innerText).catch(() => '')).replace(/\s+/g, ' ').slice(0, 90);
     const blank = text.trim().length < 3;
     const denied = /not open to you|not yours/i.test(text);
