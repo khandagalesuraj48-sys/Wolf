@@ -128,6 +128,10 @@ create table if not exists public.reviews (
   taste     smallint check (taste between 1 and 5),
   quantity  smallint check (quantity between 1 and 5),
   hygiene   smallint check (hygiene between 1 and 5),
+  overall   smallint check (overall between 1 and 5),
+  hot       smallint check (hot between 1 and 5),
+  delivery  smallint check (delivery between 1 and 5),
+  liked     text[] not null default '{}' check (cardinality(liked) <= 10),
   comment   text check (length(comment) <= 500),
   at        timestamptz not null default now(),
   unique (order_id, person_id)
@@ -409,17 +413,18 @@ begin
   perform public.write_confirmation(p_line, 'supervisor', null, p_note);
 end $$;
 
-create or replace function public.review_order(p_order uuid, p_taste smallint, p_quantity smallint, p_hygiene smallint,
-  p_comment text default null) returns void
+drop function if exists public.review_order(uuid, smallint, smallint, smallint, smallint, smallint, text[], text);
+create or replace function public.review_order(p_order uuid, p_overall smallint, p_taste smallint default null, p_quantity smallint default null,
+  p_hot smallint default null, p_delivery smallint default null, p_liked text[] default '{}', p_comment text default null) returns void
 language plpgsql security definer set search_path = '' as $$
 begin
   if not exists (select 1 from public.order_lines where order_id = p_order and person_id = public.me()) then
     raise exception 'Only someone who ate it reviews it.' using errcode = '42501';
   end if;
-  insert into public.reviews (order_id, person_id, taste, quantity, hygiene, comment)
-  values (p_order, public.me(), p_taste, p_quantity, p_hygiene, p_comment)
-  on conflict (order_id, person_id) do update set taste = excluded.taste, quantity = excluded.quantity,
-    hygiene = excluded.hygiene, comment = excluded.comment, at = now();
+  insert into public.reviews (order_id, person_id, overall, taste, quantity, hot, delivery, liked, comment)
+  values (p_order, public.me(), p_overall, p_taste, p_quantity, p_hot, p_delivery, coalesce(p_liked, '{}'), p_comment)
+  on conflict (order_id, person_id) do update set overall = excluded.overall, taste = excluded.taste, quantity = excluded.quantity,
+    hot = excluded.hot, delivery = excluded.delivery, liked = excluded.liked, comment = excluded.comment, at = now();
 end $$;
 
 -- A guest opens today's visit (one open visit at a time) and closes it.
@@ -488,10 +493,10 @@ revoke all on function public.next_code(text, text, integer), public.can_see_ord
   public.host_decide(uuid, boolean, text), public.kitchen_decide(uuid, boolean, text), public.kitchen_step(uuid, public.order_state),
   public.serve_line(uuid), public.write_confirmation(uuid, public.confirm_kind, integer, text), public.confirm_received(uuid, integer),
   public.confirm_for_group(uuid, text), public.confirm_by_phone(uuid, text), public.confirm_by_supervisor(uuid, text),
-  public.review_order(uuid, smallint, smallint, smallint, text), public.start_visit(uuid, text, uuid, uuid, text) from public, anon;
+  public.review_order(uuid, smallint, smallint, smallint, smallint, smallint, text[], text), public.start_visit(uuid, text, uuid, uuid, text) from public, anon;
 grant execute on function public.can_see_order(uuid), public.sees_all_lines(uuid), public.is_kitchen_of_order(uuid),
   public.request_order(uuid, date, public.meal, public.order_kind, jsonb, uuid, text, uuid), public.cancel_order(uuid, text),
   public.host_decide(uuid, boolean, text), public.kitchen_decide(uuid, boolean, text), public.kitchen_step(uuid, public.order_state),
   public.serve_line(uuid), public.confirm_received(uuid, integer), public.confirm_for_group(uuid, text),
   public.confirm_by_phone(uuid, text), public.confirm_by_supervisor(uuid, text),
-  public.review_order(uuid, smallint, smallint, smallint, text), public.start_visit(uuid, text, uuid, uuid, text) to authenticated;
+  public.review_order(uuid, smallint, smallint, smallint, smallint, smallint, text[], text), public.start_visit(uuid, text, uuid, uuid, text) to authenticated;
