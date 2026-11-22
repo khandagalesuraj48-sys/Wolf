@@ -1,0 +1,10 @@
+{
+  "name": "FALCON – Food & Site Operations",
+  "short_name": "FALCON",
+  "description": "Meals, parcels and deliveries at the site – by Sketchline Industries",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF8F2",
+  "theme_color": "#0E1B33",
+  "icons": []
+}
