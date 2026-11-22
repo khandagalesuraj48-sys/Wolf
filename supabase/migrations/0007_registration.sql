@@ -31,6 +31,25 @@ create table if not exists public.registrations (
 );
 create index if not exists registrations_site on public.registrations (site_id, created_at desc);
 
+-- A Portal ticket is used once: its id is kept until it has expired anyway.
+create table if not exists public.portal_tickets_used (
+  jti     text primary key check (length(jti) between 8 and 80),
+  exp     timestamptz not null,
+  used_at timestamptz not null default now()
+);
+alter table public.portal_tickets_used enable row level security;          -- no rule: only the server (service role) reaches it
+revoke all on public.portal_tickets_used from anon, authenticated;
+
+create or replace function public.server_use_ticket(p_jti text, p_exp timestamptz) returns boolean
+language plpgsql security definer set search_path = '' as $$
+begin
+  delete from public.portal_tickets_used where exp < now() - interval '1 day';
+  insert into public.portal_tickets_used (jti, exp) values (p_jti, p_exp);
+  return true;
+exception when unique_violation then
+  return false;
+end $$;
+
 -- ── the server's steps (service role only – the browser can never claim "found in HR") ───────────────────────────────────
 -- A verified company employee coming with his LION sign-in: found by his Portal user ID, or by his mobile when he registered
 -- here before (the same person – no second record), or made now. The Portal's Super Admin is FALCON's System Admin.
@@ -299,13 +318,13 @@ create policy registrations_read on public.registrations for select to authentic
 revoke all on public.registrations from anon, authenticated;
 grant select on public.registrations to authenticated;
 
-revoke all on function public.server_portal_person(text, text, text, uuid, text, text, boolean),
+revoke all on function public.server_use_ticket(text, timestamptz), public.server_portal_person(text, text, text, uuid, text, text, boolean),
   public.server_register(uuid, text, public.person_kind, text, uuid, uuid, text, jsonb, text, text, text, text, text, text),
   public.server_device(uuid, text, boolean), public.merge_people(uuid, uuid, text),
   public.decide_registration(uuid, text, jsonb, text), public.answer_registration(uuid, text), public.allow_group(uuid, boolean),
   public.grant_role(uuid, public.app_role, uuid, uuid, date, date), public.revoke_role(uuid, text),
   public.add_contractor_person(text, text, uuid, text) from public, anon, authenticated;
-grant execute on function public.server_portal_person(text, text, text, uuid, text, text, boolean),
+grant execute on function public.server_use_ticket(text, timestamptz), public.server_portal_person(text, text, text, uuid, text, text, boolean),
   public.server_register(uuid, text, public.person_kind, text, uuid, uuid, text, jsonb, text, text, text, text, text, text),
   public.server_device(uuid, text, boolean) to service_role;
 grant execute on function public.decide_registration(uuid, text, jsonb, text), public.answer_registration(uuid, text),
