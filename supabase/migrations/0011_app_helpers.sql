@@ -184,3 +184,122 @@ grant execute on function public.report_received(uuid, integer, text, text), pub
   public.visit_hosts(uuid), public.order_for_guest(uuid, uuid, date, public.meal, public.order_kind, uuid, text), public.guest_code_for_host(uuid),
   public.my_month() to authenticated;
 grant execute on function public.server_guest_code(uuid, text), public.server_guest_pass(uuid, text, text, text, text, text, text, uuid, uuid) to service_role;
+
+-- ── the kitchen's screens (o01–o16) ──────────────────────────────────────────────────────────────────────────────────────
+-- Every order of a mess for a day, with its people, lines and confirmations – one call for the kitchen's lists.
+create or replace function public.kitchen_orders(p_mess uuid, p_date date) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id', o.id, 'code', o.code, 'kind', o.kind, 'meal', o.meal, 'state', o.state, 'host_state', o.host_state, 'created_at', o.created_at,
+    'accepted_at', o.accepted_at, 'change_until', o.change_until, 'ready_at', o.ready_at, 'is_group', o.is_group, 'guest', o.guest_visit_id is not null,
+    'note', o.note, 'requester', r.full_name, 'requester_role', r.work_role,
+    'section', case when s.id is null then null else jsonb_build_object('id', s.id, 'code', s.code, 'km', s.km, 'place', s.place, 'circle', c.code) end,
+    'batch', (select x.code from public.batch_orders bo join public.batches x on x.id = bo.batch_id where bo.order_id = o.id and bo.removed_at is null limit 1),
+    'lines', (select jsonb_agg(jsonb_build_object('id', l.id, 'person', p.full_name, 'person_id', p.id, 'role', p.work_role, 'item', i.name, 'code', i.code,
+                'is_meal', l.is_meal, 'qty', l.qty, 'state', l.state, 'delivered_qty', l.delivered_qty, 'short_qty', l.short_qty,
+                'confirmed', (select k.kind from public.confirmations k where k.order_line_id = l.id)) order by l.is_meal desc, p.full_name)
+              from public.order_lines l join public.people p on p.id = l.person_id join public.items i on i.id = l.item_id where l.order_id = o.id)
+  ) order by c.code nulls last, s.km nulls last, o.created_at), '[]')
+  from public.orders o join public.people r on r.id = o.requested_by
+       left join public.sections s on s.id = o.to_section_id left join public.circles c on c.id = s.circle_id
+  where o.mess_id = p_mess and o.service_date = p_date and o.host_state in ('not_needed', 'approved')
+    and public.works_at_mess(p_mess, array['mess_owner', 'mess_operator']::public.app_role[])
+$$;
+
+-- o02 · an extra item needs the mess's OK: no → that line is taken out (the meal stays).
+create or replace function public.kitchen_extra(p_line uuid, p_ok boolean) returns void
+language plpgsql security definer set search_path = '' as $$
+declare l public.order_lines;
+begin
+  select * into l from public.order_lines where id = p_line for update;
+  if not found or l.is_meal or not public.is_kitchen_of_order(l.order_id) then raise exception 'Only this mess''s kitchen decides an extra.' using errcode = '42501'; end if;
+  if not p_ok then update public.order_lines set state = 'cancelled' where id = l.id and state = 'open'; end if;
+  perform public.audit_write(case when p_ok then 'extra_ok' else 'extra_no' end, 'order_lines', l.id::text, null, null, null, 'owner app', null);
+end $$;
+
+-- o16 · the follow-up calls: every call is kept; "got all / got less" confirm it as the owner's phone follow-up (never as an OTP);
+-- "did not get" fails the line; "no answer" only keeps the call.
+create table if not exists public.followup_calls (
+  id            uuid primary key default gen_random_uuid(),
+  order_line_id uuid not null references public.order_lines(id),
+  outcome       text not null check (outcome in ('got_all', 'got_less', 'did_not_get', 'no_answer', 'reminder')),
+  qty           integer check (qty >= 0),
+  note          text check (length(note) <= 300),
+  by_person     uuid not null references public.people(id),
+  at            timestamptz not null default now()
+);
+alter table public.followup_calls enable row level security;
+drop policy if exists followup_calls_read on public.followup_calls;
+create policy followup_calls_read on public.followup_calls for select to authenticated using (exists (select 1 from public.order_lines l where l.id = order_line_id));
+revoke all on public.followup_calls from anon, authenticated;
+grant select on public.followup_calls to authenticated;
+
+create or replace function public.follow_up(p_line uuid, p_outcome text, p_qty integer default null, p_note text default null) returns void
+language plpgsql security definer set search_path = '' as $$
+declare l public.order_lines; o public.orders;
+begin
+  select * into l from public.order_lines where id = p_line for update;
+  select * into o from public.orders where id = l.order_id;
+  if not found or not public.works_at_mess(o.mess_id) then raise exception 'Only this mess''s owner follows up.' using errcode = '42501'; end if;
+  insert into public.followup_calls (order_line_id, outcome, qty, note, by_person) values (l.id, p_outcome, p_qty, p_note, public.me());
+  if p_outcome in ('got_all', 'got_less') then
+    perform public.write_confirmation(l.id, 'owner_phone', case when p_outcome = 'got_less' then p_qty end,
+      coalesce(nullif(trim(p_note), ''), case when p_outcome = 'got_all' then 'Got all (phone)' else 'Got less (phone)' end));
+  elsif p_outcome = 'did_not_get' then
+    update public.order_lines set state = 'failed', failed_reason = 'Did not get it (owner''s call)' || coalesce(' – ' || p_note, '') where id = l.id;
+    perform public.finish_order_if_done(l.order_id);
+  elsif p_outcome = 'reminder' then
+    perform public.notify(l.person_id, 'confirm_reminder', o.code || ': please confirm what you got', null, '/app/orders/' || o.id);
+  end if;
+end $$;
+
+-- o07 · the drivers of a site the kitchen may choose, with what each is doing today.
+create or replace function public.site_drivers(p_mess uuid) returns table (person_id uuid, full_name text, busy text)
+language sql stable security definer set search_path = '' as $$
+  select distinct on (p.id) p.id, p.full_name,
+    (select string_agg(x.code || ' · ' || x.state::text, ', ') from public.batches x where x.driver_id = p.id and x.service_date = public.local_today() and x.state in ('assigned', 'accepted', 'loaded', 'on_the_way'))
+  from public.messes m join public.role_grants g on g.role = 'driver' and g.revoked_at is null and (g.site_id is null or g.site_id = m.site_id)
+       join public.people p on p.id = g.person_id
+  where m.id = p_mess and public.works_at_mess(p_mess, array['mess_owner', 'mess_operator']::public.app_role[])
+    and public.local_today() >= g.valid_from and (g.valid_to is null or public.local_today() <= g.valid_to) and p.state not in ('rejected', 'suspended')
+  order by p.id
+$$;
+
+revoke all on function public.kitchen_orders(uuid, date), public.kitchen_extra(uuid, boolean), public.follow_up(uuid, text, integer, text),
+  public.site_drivers(uuid) from public, anon;
+grant execute on function public.kitchen_orders(uuid, date), public.kitchen_extra(uuid, boolean), public.follow_up(uuid, text, integer, text),
+  public.site_drivers(uuid) to authenticated;
+
+-- A batch's driver (name and mobile) for whoever may see the batch: the kitchen, the site's office.
+create or replace function public.batch_driver(p_batch uuid) returns table (person_id uuid, full_name text, mobile text)
+language sql stable security definer set search_path = '' as $$
+  select p.id, p.full_name, p.mobile from public.batches x join public.people p on p.id = x.driver_id
+  where x.id = p_batch and public.can_see_batch(x.id)
+$$;
+revoke all on function public.batch_driver(uuid) from public, anon;
+grant execute on function public.batch_driver(uuid) to authenticated;
+
+-- ── the driver's screens (d01–d11): his trip – stops, people, what each box holds (no prices) ─────────────────────────────
+create or replace function public.driver_trip(p_batch uuid) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object('id', x.id, 'code', x.code, 'state', x.state, 'meal', x.meal, 'service_date', x.service_date, 'planned_km', x.planned_km,
+    'planned_minutes', x.planned_minutes, 'dispatched_at', x.dispatched_at, 'completed_at', x.completed_at, 'vehicle_check', x.vehicle_check,
+    'mess', m.name, 'vehicle', jsonb_build_object('reg_no', v.reg_no, 'kind', v.kind, 'capacity', v.capacity),
+    'stops', (select jsonb_agg(jsonb_build_object('seq', t.seq, 'section_id', s.id, 'section', s.code, 'km', s.km, 'place', s.place, 'lat', s.lat, 'lng', s.lng,
+                'eta', t.eta, 'reached_at', t.reached_at,
+                'people', (select jsonb_agg(jsonb_build_object('person_id', p.id, 'name', p.full_name, 'role', p.work_role, 'order_id', o.id, 'code', o.code,
+                              'lines', (select jsonb_agg(jsonb_build_object('item', i.name, 'qty', l2.qty, 'state', l2.state, 'is_meal', l2.is_meal, 'failed_reason', l2.failed_reason,
+                                                                            'delivered_qty', l2.delivered_qty) order by l2.is_meal desc)
+                                        from public.order_lines l2 join public.items i on i.id = l2.item_id where l2.order_id = o.id and l2.person_id = p.id and l2.state <> 'cancelled'),
+                              'confirmed', (select k.kind from public.order_lines l3 join public.confirmations k on k.order_line_id = l3.id where l3.order_id = o.id and l3.person_id = p.id and l3.is_meal limit 1))
+                            order by p.full_name)
+                          from public.batch_orders bo join public.orders o on o.id = bo.order_id
+                          join (select distinct order_id, person_id from public.order_lines where state <> 'cancelled') lp on lp.order_id = o.id
+                          join public.people p on p.id = lp.person_id
+                          where bo.batch_id = x.id and bo.removed_at is null and o.to_section_id = s.id)) order by t.seq)
+              from public.batch_stops t join public.sections s on s.id = t.section_id where t.batch_id = x.id))
+  from public.batches x join public.messes m on m.id = x.mess_id left join public.vehicles v on v.id = x.vehicle_id
+  where x.id = p_batch and public.can_see_batch(x.id)
+$$;
+revoke all on function public.driver_trip(uuid) from public, anon;
+grant execute on function public.driver_trip(uuid) to authenticated;

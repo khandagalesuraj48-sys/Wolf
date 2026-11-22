@@ -5,6 +5,8 @@ import { Setup } from './screens/Setup';
 import * as Start from './screens/start';
 import * as Emp from './screens/employee';
 import * as Guest from './screens/guest';
+import * as Own from './screens/owner';
+import * as Drv from './screens/driver';
 import { Body, Denied, Failed, Loading, Screen } from './ui/kit';
 
 // Who may open what: the screens follow the roles (the database checks again on every read and action).
@@ -37,6 +39,7 @@ function Root() {
 }
 
 const EMP: Role[] = ['employee', 'guest'];
+const OWN: Role[] = ['mess_owner', 'mess_operator'];
 
 export function App() {
   return (
@@ -80,6 +83,31 @@ export function App() {
           <Route path="/app/group" element={<Need roles={['employee']}><Emp.Group /></Need>} />
           <Route path="/app/me" element={<Need roles={EMP}><Emp.Me /></Need>} />
           <Route path="/app/notifications" element={<Need roles={EMP}><Emp.Me /></Need>} />
+
+          <Route path="/owner" element={<Need roles={OWN}><Own.OwnerHome /></Need>} />
+          <Route path="/owner/requests" element={<Need roles={OWN}><Own.Requests /></Need>} />
+          <Route path="/owner/requests/:id" element={<Need roles={OWN}><Own.RequestDetail /></Need>} />
+          <Route path="/owner/kitchen" element={<Need roles={OWN}><Own.Kitchen /></Need>} />
+          <Route path="/owner/parcels" element={<Need roles={OWN}><Own.Parcels /></Need>} />
+          <Route path="/owner/batches/:id/driver" element={<Need roles={OWN}><Own.BatchDriver /></Need>} />
+          <Route path="/owner/batches/:id/route" element={<Need roles={OWN}><Own.BatchRoute /></Need>} />
+          <Route path="/owner/batches/:id/dispatch" element={<Need roles={OWN}><Own.BatchDispatch /></Need>} />
+          <Route path="/owner/live" element={<Need roles={OWN}><Own.Live /></Need>} />
+          <Route path="/owner/menu" element={<Need roles={OWN}><Own.MenuPublish /></Need>} />
+          <Route path="/owner/guests" element={<Need roles={OWN}><Own.GuestMeals /></Need>} />
+          <Route path="/owner/closing" element={<Need roles={OWN}><Own.Closing /></Need>} />
+          <Route path="/owner/complaints" element={<Need roles={['mess_owner']}><Own.OwnerComplaints /></Need>} />
+          <Route path="/owner/billing" element={<Need roles={['mess_owner']}><Own.OwnerBilling /></Need>} />
+          <Route path="/owner/follow-up" element={<Need roles={['mess_owner']}><Own.FollowUp /></Need>} />
+
+          <Route path="/driver" element={<Need roles={['driver']}><Drv.DriverHome /></Need>} />
+          <Route path="/driver/assignments/:id" element={<Need roles={['driver']}><Drv.Assign /></Need>} />
+          <Route path="/driver/vehicle" element={<Need roles={['driver']}><Drv.Vehicle /></Need>} />
+          <Route path="/driver/trip" element={<Need roles={['driver']}><Drv.TripStops /></Need>} />
+          <Route path="/driver/route/:section" element={<Need roles={['driver']}><Drv.RouteNext /></Need>} />
+          <Route path="/driver/stops/:section" element={<Need roles={['driver']}><Drv.StopPeople /></Need>} />
+          <Route path="/driver/hand/:order/:person" element={<Need roles={['driver']}><Drv.HandOver /></Need>} />
+          <Route path="/driver/summary/:id" element={<Need roles={['driver']}><Drv.TripSummary /></Need>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
