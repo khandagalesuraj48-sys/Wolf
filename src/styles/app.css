@@ -1,0 +1,26 @@
+/* FALCON – the app's stylesheet: the approved look first, then Tailwind's helpers, then what a real phone needs. */
+@import './design.css';
+@import './icons.css';
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('/fonts/schibsted-grotesk-latin-wght-normal.woff2') format('woff2');
+}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body { margin: 0; background: var(--cream); color: var(--ink); }
+body { font-family: 'Schibsted Grotesk', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+#root { min-height: 100dvh; }
+
+/* A board is 390 × 844; a real phone is any size: the screen takes the whole phone, its middle part scrolls, and on a big
+   screen the phone screens stay a phone's width in the middle. */
+.scr { width: 100%; max-width: 480px; height: 100dvh; margin: 0 auto; }
+.scr .body { overflow-y: auto; padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+.scr .top { padding-top: calc(18px + env(safe-area-inset-top)); }
+
+:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
