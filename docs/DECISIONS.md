@@ -75,6 +75,21 @@ Every decision here is the owner's. The newest wins. Nothing is built that is no
   employee too", everybody in HR's list counts unless he LEFT; HR's own status is only shown.)
 * **The phone app is Flutter** ("APK … flutter ni banawleli asawi proper"; repository `khandagalesuraj48-sys/FALCONAPK`): the app's
   own screens, not the web shown inside; package `si.sketchline.falcon`.
+* **The company code first** (23-11-2026 – "I work for RCL as nko deus … ERP sarkhe banau – company code takaych ani tyache adhi
+  mhanje app olkhel user kuthun aala, nantr tyacha employee code mag tyachi details yetil ani OTP … karan mi dusryla app dile tr te RCL
+  name diste; RCL code format RCL000"; his answers: the full details before the code with the mobile masked; "I am a guest" under the
+  employee code): the first screen asks only the company code (the app names no company before it); then the employee code (e.g.
+  RCL296) → HR's details → the WhatsApp code. The code is kept on the phone. "RCL ID" is called "employee code" on every screen.
+* **A mess contractor's own code** (23-11-2026 – "owner … tyala pn ek code asel … admin contractor add krel ani tyacha company code
+  tharwel – toch code ala tr tyachya company cha owner aala"; his answer: the mobiles the Admin gave – owner and operators): the System
+  Admin sets it on the contractor (one code in all of FALCON, never a company's); typed on the first screen, it asks the mobile – only a
+  mobile with a live Mess owner / operator role at that contractor's mess gets a code.
+* **Limits on codes** (23-11-2026 – "rate limit law nahi tr employee ughach OTP pathwat basel"): one mobile – 1 code a minute, 5 an
+  hour, 10 a day; first-screen codes, employee codes and contractor mobiles – limited per internet address. Only fingerprints are kept,
+  for a day.
+* **The work order's BOQ** (23-11-2026 – "work contract madhe BOQ perfect de item wise ani rate name disaw"; his answer: item, unit,
+  quantity, rate, amount, total): Accounts / the System Admin set each item's quantity; the rate is the dated, approved rate of that
+  day; every change is in the audit log.
 * **The logo is B** (23-11-2026 – asked "REAL WATAWA LOGO PREMIUM FEEL DE DARK MADEH NKO … APLE APP RELATED"; two options shown as
   pictures; his answer "B OK AAHE"): a real-looking peregrine falcon on a gold-rimmed plate, a fork and a knife crossed behind, on light
   ivory. Used for the web's browser tab and home-screen icon, the first screen, the office sidebar, and the Android app's icon and

@@ -1,4 +1,4 @@
-# FALCON – test report (23-11-2026, updated the same day for HR's employees)
+# FALCON – test report (23-11-2026, updated the same day for HR's employees, then for the company code, the contractor's code, the limits and the BOQ)
 
 What was run, on what, and what was **not** run. Every command had a time limit.
 
@@ -6,14 +6,15 @@ What was run, on what, and what was **not** run. Every command had a time limit.
 
 | What | How | Result |
 |---|---|---|
-| The database, part by part | `supabase/test/run.sh` – a new throwaway Postgres 16 database with a stand-in of Supabase (`auth`, `storage`, roles, the Realtime publication); every migration run **twice**; then the test files | migrations ran twice with no error; **163 checks passed** (0001: 35 · 0002: 30 · 0003: 53 · 0012: 8 · 0013: 37) |
-| The master SQL as he will run it | `supabase/test/run_master.sh` – a new clean database; `FALCON_MASTER.sql` run once, then again; `seed.sql` twice; then every test file against that database | first run and second run with no error; seed twice with no error (7 items); **47 tables, 0 without Row Level Security**; **163 checks passed** |
-| The server's own steps | `npm test` (vitest): the Portal ticket check (signature, `aud`, `exp`, issuer), the Supabase hook signature, the WhatsApp code message, the RCL ID look-up in the kept copy, HR's list read page by page with its secret, `FALCON_FIRST_ADMIN`, the browser's settings check | **22 passed** |
+| The database, part by part | `supabase/test/run.sh` – a new throwaway Postgres 16 database with a stand-in of Supabase (`auth`, `storage`, roles, the Realtime publication); every migration run **twice**; then the test files | migrations ran twice with no error; **194 checks passed** (0001: 35 · 0002: 30 · 0003: 53 · 0012: 8 · 0013: 37 · 0014: 31) |
+| The master SQL as he will run it | `supabase/test/run_master.sh` – a new clean database; `FALCON_MASTER.sql` run once, then again; `seed.sql` twice; then every test file against that database | first run and second run with no error; seed twice with no error (7 items); **49 tables, 0 without Row Level Security**; **194 checks passed** |
+| The server's own steps | `npm test` (vitest): the Portal ticket check (signature, `aud`, `exp`, issuer), the Supabase hook signature, the WhatsApp code message, the RCL ID look-up in the kept copy, HR's list read page by page with its secret, `FALCON_FIRST_ADMIN`, the browser's settings check, the first screen's code, the limits, the company of a step | **30 passed** |
 | The update of 23-11-2026 on a live-like database | the master of the first run + the seed, then `supabase/updates/2026-11-23_hr_people.sql` twice, then every test file | both runs with no error; 162 checks passed; 0 tables without RLS |
+| The update of 23-11-2026 (third – part 0014) on a live-like database | parts 0001–0013 + the seed, then `supabase/updates/2026-11-23c_start_codes.sql` twice, then every test file | both runs with no error; 0 tables without RLS; no contractor changed; 194 checks passed |
 | Types | `npx tsc --noEmit` | no error |
 | The build | `npm run build` | built; the phone's part 485 KB (135 KB compressed); the office's pages load only when opened (5 parts, 20–50 KB each) |
 | Server files | `node --check` on `api/*.js`, `api/_lib/*.js` | all parse |
-| Every screen opens | `test/smoke.cjs` – the built app in Chromium (Playwright) with a **mocked** database: signed in with every role, each of the 66 routes opened | **66 of 66** rendered with no uncaught error |
+| Every screen opens | `test/smoke.cjs` – the built app in Chromium (Playwright) with a **mocked** database: signed in with every role, each of the 68 routes opened (with the first screen's code kept as typed before); every picture of every page loaded | **68 of 68** rendered with no uncaught error and no missing picture |
 | No secret in the repository | a search of every tracked file for keys, tokens, private keys, database addresses with a password | none found (the test files use made-up numbers like 9800000000) |
 
 ### What the database checks cover (examples)
@@ -38,6 +39,12 @@ What was run, on what, and what was **not** run. Every command had a time limit.
 * A dated setting: only the System Admin; never backwards; the old value ends the day before and stays; the complaint answer
   times (serious / other) count from their day.
 * Every step is in the audit log; nobody can change or delete a line of it.
+* (0014) A contractor's sign-in code: only the System Admin, never by a plain change of the row, one code in all of FALCON, never a
+  company's code (and a company never takes a contractor's); the first screen's code answered only by the server; only the mobiles
+  with a live Mess owner / operator role at the contractor's mess; a role taken away – no longer; the limits (a second code in the
+  minute waits, the sixth in an hour waits, another mobile is not held up, only fingerprints kept, nothing readable from the app); the
+  BOQ set only by Accounts / the System Admin through its step, one line an item, 0 or more, seen by whoever sees the work order,
+  every change in the audit log with before and after.
 
 ## Not run – not verified
 
@@ -49,6 +56,9 @@ What was run, on what, and what was **not** run. Every command had a time limit.
 * **Supabase Auth** (the phone code, the Send SMS hook, the LION one-time link), **Meta WhatsApp** (the template `otp`),
   **the Portal's ticket** (module `falcon` not there yet), **HR's look-up** (not there yet), **Vercel** (project, timer,
   headers) – none was reached from here.
+* **The new first screens against the live server** (the company code, the employee code, a contractor's code) – the server's
+  steps were checked with unit tests and the database functions with the database tests; the screens were opened with a mocked
+  database only. **Supabase's own SMS limit** (30 an hour by default) is a dashboard setting – not reachable from here.
 * **A real phone** (camera QR reading, GPS of the van, the photo / voice of a complaint), **iPhone / Android app builds**
   (Capacitor – not made in this piece of work).
 * The look against each of the 71 boards was compared by eye on a few web pages only (`docs/DESIGN_INVENTORY.md` → "Checked

@@ -13,6 +13,10 @@
    road). Route times are **suggested** from the dated settings "van speed" (30 km/h until set) and "minutes a stop" (4).
 5. ~~**The FALCON logo**~~ – logo B is in use since 23-11-2026.
 6. **"Posted in the ERP":** Accounts types the ERP entry's reference; nothing is posted to a ledger automatically.
+7. **Another company's employees:** the company code works for any company in FALCON, but only RCL's HR list is copied; another
+   company's people register and wait for their Site Admin (no HR look-up) until its HR is connected.
+8. **The limits per internet address** count a whole site's Wi-Fi as one place: 60 look-ups in 10 minutes, 300 a day. A very busy
+   shift start on one Wi-Fi could reach it (the screen says how long to wait).
 
 ## Made here – to be confirmed by him
 

@@ -37,10 +37,10 @@ export async function hrList(fetchImpl = fetch) {
   return all;
 }
 
-export async function hrLookup(rclId, mobile, rpcImpl = rpc) {
+export async function hrLookup(rclId, mobile, rpcImpl = rpc, company = companyCode()) {
   if (!rclId) return { result: 'not_checked' };
   try {
-    const j = await rpcImpl('server_hr_find', { p_company_code: companyCode(), p_rcl_id: String(rclId).toUpperCase(), p_mobile: mobile || null });
+    const j = await rpcImpl('server_hr_find', { p_company_code: company, p_rcl_id: String(rclId).toUpperCase(), p_mobile: mobile || null });
     const result = ['found', 'not_found', 'maybe'].includes(j && j.result) ? j.result : 'not_checked';
     if (result === 'not_checked' || result === 'not_found') return { result };
     return { result, name: str(j.name, 120), designation: str(j.designation, 80), category: str(j.category, 20), site: str(j.site, 16),

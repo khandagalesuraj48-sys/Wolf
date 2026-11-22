@@ -34,6 +34,9 @@ const TABLES = {
   circles: [{ id: ID(50), site_id: ID(10), code: 'A', name: 'Circle A', km_from: 0, km_to: 10 }],
   sections: [{ id: ID(20), site_id: ID(10), circle_id: ID(50), code: 'A1', name: 'A1', km: 2.4, place: 'office', lat: null, lng: null, active: true }],
   items: [{ id: ID(60), code: 'lunch', name: 'Lunch', kind: 'meal', meal: 'lunch', unit: 'plate', active: true }],
+  work_orders: [{ id: ID(80), number: 'WO-T-1', site_id: ID(10), mess_id: ID(30), contractor_id: ID(40), valid_from: '2026-04-01', valid_to: '2027-03-31', payment_days: 30, advance_amount: 0, advance_recovery_pct: 0, security_deposit: 0, retention_pct: 5, state: 'active', messes: { name: 'Test Mess' }, contractors: { name: 'Test Caterers' } }],
+  rates: [{ id: ID(81), item_id: ID(60), rate: 95, valid_from: '2026-04-01', valid_to: null, state: 'approved', asked_by: null, reason: null, items: { name: 'Lunch', code: 'lunch' } }],
+  work_order_boq: [{ id: ID(82), item_id: ID(60), qty: 30000, note: null, items: { name: 'Lunch', code: 'lunch', unit: 'plate' } }],
   meal_windows: [{ id: ID(70), mess_id: ID(30), meal: 'lunch', serve_from: '00:00:00', serve_to: '23:59:00', order_by: '23:00:00', change_minutes: 30, valid_from: '2026-01-01', valid_to: null }],
 };
 const route = async (r) => {
@@ -49,7 +52,7 @@ const route = async (r) => {
   return send(TABLES[t] || []);
 };
 
-const ROUTES = ['/', '/start', '/start/rcl-id', '/start/new', '/guest/new', '/app', '/app/scan', '/app/meal', '/app/parcel', '/app/section', '/app/menu', '/app/menu/poster',
+const ROUTES = ['/', '/start', '/start/employee', '/start/contractor', '/start/rcl-id', '/start/new', '/guest/new', '/app', '/app/scan', '/app/meal', '/app/parcel', '/app/section', '/app/menu', '/app/menu/poster',
   '/app/orders', '/app/orders/' + ID(99), '/app/orders/' + ID(99) + '/track', '/app/orders/' + ID(99) + '/driver', '/app/orders/' + ID(99) + '/confirm', '/app/orders/' + ID(99) + '/quantity',
   '/app/orders/' + ID(99) + '/review', '/app/complaints/new', '/app/complaints/' + ID(98), '/app/guest', '/app/group', '/app/me',
   '/owner', '/owner/requests', '/owner/requests/' + ID(99), '/owner/kitchen', '/owner/parcels', '/owner/batches/' + ID(97) + '/driver', '/owner/batches/' + ID(97) + '/route',
@@ -64,7 +67,11 @@ const ROUTES = ['/', '/start', '/start/rcl-id', '/start/new', '/guest/new', '/ap
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   await ctx.route('https://smoke.supabase.co/**', route);
   await ctx.route('wss://smoke.supabase.co/**', (r) => r.abort());
-  await ctx.addInitScript((s) => { localStorage.setItem('sb-smoke-auth-token', JSON.stringify(s)); }, session);
+  await ctx.addInitScript((s) => {
+    localStorage.setItem('sb-smoke-auth-token', JSON.stringify(s));
+    // (23-11-2026) the first screen's code, as typed before
+    localStorage.setItem('falcon.door', JSON.stringify({ kind: 'company', code: 'TST', name: 'Test Company', company: 'TST', company_name: 'Test Company' }));
+  }, session);
   const bad = [];
   for (const p of ROUTES) {
     const page = await ctx.newPage();
@@ -76,7 +83,7 @@ const ROUTES = ['/', '/start', '/start/rcl-id', '/start/new', '/guest/new', '/ap
     // every picture of the page is there (the logo of 23-11-2026 too)
     const broken = await page.evaluate(() => [...document.images].filter((i) => i.complete && i.naturalWidth === 0).map((i) => i.getAttribute('src'))).catch(() => []);
     for (const b of broken) errs.push('picture not found: ' + b);
-    if (process.env.SMOKE_SHOTS && ['/start', '/admin'].includes(p)) await page.screenshot({ path: path.join(process.env.SMOKE_SHOTS, (p.slice(1) || 'root').replace(/\//g, '_') + '.png') });
+    if (process.env.SMOKE_SHOTS && ['/start', '/start/employee', '/admin', '/admin/work-orders', '/admin/mess'].includes(p)) await page.screenshot({ path: path.join(process.env.SMOKE_SHOTS, (p.slice(1) || 'root').replace(/\//g, '_') + '.png') });
     const text = (await page.evaluate(() => document.body.innerText).catch(() => '')).replace(/\s+/g, ' ').slice(0, 90);
     const blank = text.trim().length < 3;
     const denied = /not open to you|not yours/i.test(text);

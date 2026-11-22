@@ -5,6 +5,7 @@ import { verifyHook } from './webhook.js';
 import { codePayload, toNumber, sendCode } from './whatsapp.js';
 import { hrList, hrLookup } from './hr.js';
 import { firstAdmin } from '../welcome.js';
+import { doorOf, companyFor, limit, clientIp, LIMITS } from './door.js';
 
 const PORTAL = 'https://portal.test';
 const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
@@ -121,5 +122,47 @@ describe('the first System Admin (FALCON_FIRST_ADMIN)', () => {
     expect(firstAdmin('')).toBe(null);
     expect(firstAdmin('12345')).toBe(null);
     expect(firstAdmin('+1 415 555 0100')).toBe(null);
+  });
+});
+
+describe('the first screen\'s code and the limits (23-11-2026)', () => {
+  it('asks the database only for a code of 2–12 letters and numbers, in capitals', async () => {
+    const seen = [];
+    const rpcImpl = async (name, args) => { seen.push([name, args]); return { kind: 'company', code: 'TST', company: 'TST' }; };
+    expect(await doorOf(' tst ', rpcImpl)).toMatchObject({ kind: 'company' });
+    expect(await doorOf('A B', rpcImpl)).toBeNull();
+    expect(await doorOf('', rpcImpl)).toBeNull();
+    expect(seen).toEqual([['server_door', { p_code: 'TST' }]]);
+  });
+  it('says plainly when the database update is not run yet', async () => {
+    const rpcImpl = async () => { const e = new Error('x'); e.code = 'PGRST202'; throw e; };
+    await expect(doorOf('TST', rpcImpl)).rejects.toThrow(/update of 23-11-2026/);
+  });
+  it('takes the company of a contractor\'s code, refuses an unknown code, and keeps this FALCON\'s own when none is named', async () => {
+    expect(await companyFor('TCAT', async () => ({ kind: 'contractor', code: 'TCAT', company: 'TST' }))).toBe('TST');
+    await expect(companyFor('NOPE', async () => null)).rejects.toThrow(/No company or contractor/);
+    expect(await companyFor(undefined, async () => { throw new Error('not asked'); })).toBe('RCL');
+  });
+  it('stops a try over the limit with the time to wait', async () => {
+    await expect(limit('otp', '+919800000001', async () => ({ ok: false, wait: 42 }))).rejects.toMatchObject({ status: 429, message: expect.stringMatching(/Too many codes.*42 seconds/) });
+    await expect(limit('lookup', '1.2.3.4', async () => ({ ok: false, wait: 600 }))).rejects.toThrow(/Too many tries.*10 minutes/);
+    expect(await limit('door', '1.2.3.4', async () => ({ ok: true }))).toEqual({ ok: true });
+  });
+  it('never stops the sign-in code when the database cannot count (lenient), but does stop a look-up (strict)', async () => {
+    const down = async () => { const e = new Error('x'); e.code = 'PGRST202'; throw e; };
+    expect(await limit('otp', '+919800000001', down, false)).toMatchObject({ ok: true, unchecked: true });
+    await expect(limit('lookup', '1.2.3.4', down)).rejects.toThrow(/update of 23-11-2026/);
+  });
+  it('a mobile: 1 code a minute, 5 an hour, 10 a day', () => {
+    expect(LIMITS.otp).toEqual([{ n: 1, secs: 60 }, { n: 5, secs: 3600 }, { n: 10, secs: 86400 }]);
+  });
+  it('reads the place from Vercel\'s header', () => {
+    expect(clientIp({ headers: { 'x-real-ip': '1.2.3.4', 'x-forwarded-for': '9.9.9.9' } })).toBe('1.2.3.4');
+    expect(clientIp({ headers: { 'x-forwarded-for': '5.6.7.8, 10.0.0.1' } })).toBe('5.6.7.8');
+  });
+  it('looks an employee code up in the company of the first screen', async () => {
+    let asked;
+    await hrLookup('rcl296', null, async (n, a) => { asked = a; return { result: 'not_found' }; }, 'TST');
+    expect(asked).toMatchObject({ p_company_code: 'TST', p_rcl_id: 'RCL296' });
   });
 });

@@ -2,7 +2,7 @@
 
 ## What there is
 
-* `supabase/migrations/0001…0013_*.sql` – the source, part by part (each safe to run again):
+* `supabase/migrations/0001…0014_*.sql` – the source, part by part (each safe to run again):
 
 | Part | What it makes |
 |---|---|
@@ -18,6 +18,7 @@
 | 0010 realtime | the live tables |
 | 0011 app helpers | the screens' read functions (my van, the kitchen's list, the follow-up calls, the office's numbers …) |
 | 0012 admin | a dated setting changed by the System Admin (`set_setting`) |
+| 0014 Start codes | a contractor's own sign-in code (System Admin only, one code in all of FALCON, never a company's); what a first-screen code is (company / contractor – the server only); the contractor's mobiles (a live Mess owner / operator role at one of its messes); limits – a mobile 1 code a minute, 5 an hour, 10 a day; look-ups per internet address (fingerprints only, kept one day); the work order's BOQ (quantity per item, Accounts / System Admin, audited) |
 | 0013 HR's people | HR's list kept (RCL ID, name, designation, category, site, mobile, status – nothing else), copied every hour; a new HR site made; who left stopped; an HR employee known by his mobile after a WhatsApp code; the first System Admin (`FALCON_FIRST_ADMIN`) |
 
 * `supabase/FALCON_MASTER.sql` – **the one script to run**, built from the parts by `supabase/build_master.sh` (never edited by
@@ -32,6 +33,7 @@
 | Date | File | What |
 |---|---|---|
 | 23-11-2026 | `supabase/updates/2026-11-23_hr_people.sql` | HR's employees in FALCON and the first System Admin (part 0013). Tested on a copy with the master of 23-11-2026 and the seed: run twice, then every test (162 checks) |
+| 23-11-2026 | `supabase/updates/2026-11-23c_start_codes.sql` | The company code first, a contractor's sign-in code, the limits on codes and look-ups, the BOQ (part 0014). **Run it before the web update of the same day is merged.** Tested on a copy with parts 0001–0013 and the seed: run twice (no error, no table without RLS, no contractor changed), then every test (194 checks) |
 | 23-11-2026 | `supabase/updates/2026-11-23b_hr_not_left.sql` | Every employee in HR's list who has NOT LEFT counts (the first copy: all 86 were "pending" / "incomplete" in HR). Part 0013's functions again. Tested on a copy with the first master, the seed and the first update: run twice, then every test (163 checks) |
 
 ## Running it (his step)

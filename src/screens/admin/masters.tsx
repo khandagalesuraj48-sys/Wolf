@@ -5,7 +5,7 @@ import QRCode from 'qrcode';
 import { supabase } from '../../lib/supabase';
 import { call, db, one, rows, useAct, useLoad } from '../../lib/db';
 import { useSession } from '../../lib/session';
-import { day, inr, mealName, MEALS, today } from '../../lib/fmt';
+import { day, inr, maskMobile, mealName, MEALS, today } from '../../lib/fmt';
 import { Icon } from '../../ui/Icon';
 import { RoadMap } from '../../ui/RoadMap';
 import { ErrorLine, Failed, Input, Loading } from '../../ui/kit';
@@ -118,9 +118,19 @@ export function Messes() {
 // ── w04 · w05 · Contractors, bank details, documents ──
 function Contractors() {
   const s = useSession();
-  const list = useLoad(() => rows<{ id: string; name: string; kind: string; contact_name: string | null; contact_mobile: string | null; gstin: string | null; pan: string | null; udyam: string | null; address: string | null; active: boolean }>(db().from('contractors').select('*').order('name')), []);
+  const list = useLoad(() => rows<{ id: string; name: string; kind: string; contact_name: string | null; contact_mobile: string | null; gstin: string | null; pan: string | null; udyam: string | null; address: string | null; active: boolean; login_code: string | null }>(db().from('contractors').select('*').order('name')), []);
   const [sel, setSel] = useState('');
   const c = (list.data || []).find((x) => x.id === sel) || list.data?.[0];
+  // (23-11-2026) who signs in with the contractor's code: a live Mess owner / operator role at one of its messes (People and roles)
+  const signers = useLoad(async () => {
+    if (!c) return [];
+    const ms = await rows<{ id: string; name: string }>(db().from('messes').select('id,name').eq('contractor_id', c.id));
+    if (!ms.length) return [];
+    const gs = await rows<{ person_id: string; role: string; mess_id: string }>(db().from('role_grants').select('person_id,role,mess_id').in('mess_id', ms.map((m) => m.id)).in('role', ['mess_owner', 'mess_operator']).is('revoked_at', null));
+    const ps = gs.length ? await rows<{ id: string; full_name: string; mobile: string | null }>(db().from('people').select('id,full_name,mobile').in('id', [...new Set(gs.map((g) => g.person_id))])) : [];
+    return gs.map((g) => ({ ...g, person: ps.find((p) => p.id === g.person_id), mess: ms.find((m) => m.id === g.mess_id)?.name }));
+  }, [c?.id]);
+  const [code, setCode] = useState('');
   const bank = useLoad(() => c ? one<{ bank_name: string; ifsc: string; account_no: string }>(db().from('contractor_bank').select('bank_name,ifsc,account_no').eq('contractor_id', c.id).limit(1)) : Promise.resolve(null), [c?.id]);
   const docs = useLoad(() => c ? rows<{ id: string; kind: string; number: string | null; valid_from: string | null; valid_to: string | null; state: string; file_path: string | null }>(db().from('contractor_documents').select('*').eq('contractor_id', c.id).order('kind')) : Promise.resolve([]), [c?.id]);
   const [f, setF] = useState({ name: '', kind: 'proprietor', contact: '', mobile: '', gstin: '', pan: '', address: '' });
@@ -136,6 +146,7 @@ function Contractors() {
     if (file) { path = s.me!.company_id + '/' + c!.id + '/' + Date.now() + '-' + file.name.replace(/[^\w.-]/g, '_'); const r = await supabase!.storage.from('contractor-papers').upload(path, file, { contentType: file.type }); if (r.error) throw new Error('The file could not be sent.'); }
     await save('contractor_documents', { contractor_id: c!.id, kind: d.kind, number: val(d.number), valid_from: val(d.from), valid_to: val(d.to), file_path: path, state: path ? 'attached' : 'asked', asked_at: path ? null : new Date().toISOString() }); docs.reload();
   });
+  const saveCode = () => a.run(async () => { await call('office_contractor_code', { p_contractor: c!.id, p_code: code.trim().toUpperCase() || null }); setCode(''); list.reload(); });
   const verify = (id: string) => a.run(async () => { await save('contractor_documents', { id, state: 'verified', verified_by: s.me!.id, verified_at: new Date().toISOString() }); docs.reload(); });
   const open = async (p: string) => { const r = await supabase!.storage.from('contractor-papers').createSignedUrl(p, 300); if (r.data) window.open(r.data.signedUrl, '_blank'); };
   const ending = (docs.data || []).filter((x) => x.valid_to && x.valid_to <= today(60) && x.valid_to >= today());
@@ -146,6 +157,16 @@ function Contractors() {
       <div className="wcard"><h3>Tax</h3>{[['PAN', c.pan], ['GSTIN', c.gstin], ['Udyam', c.udyam], ['GST · TDS', 'Accounts\' rules with dates']].map(([k, v]) => <div key={k as string} className="row sm" style={{ padding: '4px 0' }}><span className="sp">{k}</span><b style={{ color: 'var(--ink)' }}>{v || '–'}</b></div>)}</div>
       <div className="wcard"><h3>Bank</h3>{bank.data ? <>{[['Bank · IFSC', bank.data.bank_name + ' · ' + bank.data.ifsc], ['Account', 'XXXX ' + bank.data.account_no.slice(-4)]].map(([k, v]) => <div key={k} className="row sm" style={{ padding: '4px 0' }}><span className="sp">{k}</span><b style={{ color: 'var(--ink)' }}>{v}</b></div>)}</> : <div className="sm">{money ? 'Not given yet' : 'Seen only by Accounts'}</div>}
         {money && <div className="col" style={{ gap: 6, marginTop: 8 }}><Input value={b.bank} onChange={(v) => setB({ ...b, bank: v })} placeholder="Bank" /><Input value={b.ifsc} onChange={(v) => setB({ ...b, ifsc: v })} placeholder="IFSC" /><Input value={b.acc} onChange={(v) => setB({ ...b, acc: v })} placeholder="Account number" inputMode="numeric" /><button className="wbtn" onClick={saveBank} disabled={!b.bank || !b.ifsc || !b.acc}>Save bank details</button></div>}</div>
+    </div>}
+    {c && <div className="wcard"><h3>Sign-in code – for the owner and his operators</h3>
+      <div className="row wrap" style={{ gap: 14, alignItems: 'center' }}>
+        <b style={{ fontSize: 26, letterSpacing: '.08em', color: c.login_code ? 'var(--ink)' : 'var(--muted)' }}>{c.login_code || 'Not set'}</b>
+        {s.has('system_admin') && <><Input value={code} onChange={(v) => setCode(v.toUpperCase())} placeholder={c.login_code ? 'New code' : 'Code, e.g. SAIMESS'} maxLength={12} />
+          <button className="wbtn pri" onClick={saveCode} disabled={a.busy || (!code.trim() && !c.login_code)}>{code.trim() ? 'Save code' : 'Remove code'}</button></>}
+      </div>
+      <div className="xs" style={{ marginTop: 6 }}>Typed on the app's first screen instead of the company code: the app knows {c.name}'s people have come. One code in all of FALCON – never a company's code. Only the System Admin sets it.</div>
+      <Tbl head={['Signs in', 'Mobile', 'Role', 'Mess']} empty="Nobody yet – give the Mess owner / Mess operator role at this contractor's mess in People and roles"
+        rows={(signers.data || []).map((x) => [<b>{x.person?.full_name || '–'}</b>, maskMobile(x.person?.mobile), x.role === 'mess_owner' ? 'Owner' : 'Operator', x.mess || '–'])} />
     </div>}
     {c && <><div className="kpis"><Kpi label="Valid" value={(docs.data || []).filter((x) => x.state === 'verified' && (!x.valid_to || x.valid_to >= today())).length} tone="leaf" /><Kpi label="Ending in 60 days" value={ending.length} tone="amber" /><Kpi label="Expired" value={(docs.data || []).filter((x) => x.valid_to && x.valid_to < today()).length} tone="red" /><Kpi label="Asked, not given" value={(docs.data || []).filter((x) => x.state === 'asked').length} tone="red" /></div>
       <div className="wcard"><Tbl head={['Document', 'Number', 'Valid from', 'Valid till', 'Status', '']} hl={(i) => !!ending.find((e) => e.id === (docs.data || [])[i]?.id)}
@@ -173,9 +194,12 @@ export function WorkOrders() {
   const wos = useLoad(() => rows<{ id: string; number: string; site_id: string; mess_id: string; contractor_id: string; valid_from: string; valid_to: string; payment_days: number; advance_amount: number; advance_recovery_pct: number; security_deposit: number; retention_pct: number; state: string; messes: { name: string } | null; contractors: { name: string } | null }>(db().from('work_orders').select('*,messes(name),contractors(name)').order('valid_from', { ascending: false })), []);
   const [sel, setSel] = useState('');
   const w = (wos.data || []).find((x) => x.id === sel) || wos.data?.[0];
-  const rates = useLoad(() => w ? rows<{ id: string; rate: number; valid_from: string; valid_to: string | null; state: string; asked_by: string | null; reason: string | null; items: { name: string; code: string } }>(db().from('rates').select('*,items(name,code)').eq('work_order_id', w.id).order('valid_from', { ascending: false })) : Promise.resolve([]), [w?.id]);
+  const rates = useLoad(() => w ? rows<{ id: string; item_id: string; rate: number; valid_from: string; valid_to: string | null; state: string; asked_by: string | null; reason: string | null; items: { name: string; code: string } }>(db().from('rates').select('*,items(name,code)').eq('work_order_id', w.id).order('valid_from', { ascending: false })) : Promise.resolve([]), [w?.id]);
   const pens = useLoad(() => w ? rows<{ id: string; code: string; what: string; amount: number | null; per: string; valid_from: string }>(db().from('penalty_rules').select('*').eq('work_order_id', w.id)) : Promise.resolve([]), [w?.id]);
-  const items = useLoad(() => rows<{ id: string; name: string; code: string }>(db().from('items').select('id,name,code').eq('active', true).order('name')), []);
+  const items = useLoad(() => rows<{ id: string; name: string; code: string; unit: string }>(db().from('items').select('id,name,code,unit').eq('active', true).order('name')), []);
+  // (23-11-2026, his word: "work contract madhe BOQ perfect – item wise ani rate, name disawa") the BOQ, item by item
+  const boq = useLoad(() => w ? rows<{ id: string; item_id: string; qty: number; note: string | null; items: { name: string; code: string; unit: string } }>(db().from('work_order_boq').select('id,item_id,qty,note,items(name,code,unit)').eq('work_order_id', w.id)) : Promise.resolve([]), [w?.id]);
+  const [bq, setBq] = useState({ item: '', qty: '' });
   const messes = useLoad(() => rows<{ id: string; name: string; site_id: string; contractor_id: string | null }>(db().from('messes').select('id,name,site_id,contractor_id')), []);
   const [r, setR] = useState({ item: '', rate: '', from: today(1) });
   const [nw, setNw] = useState({ number: '', mess: '', from: '', to: '', days: '30', adv: '0', advp: '0', sd: '0', ret: '5' });
@@ -185,6 +209,11 @@ export function WorkOrders() {
   const ask = () => a.run(async () => { await save('rates', { work_order_id: w!.id, item_id: r.item, rate: Number(r.rate), valid_from: r.from, asked_by: s.me!.id }); rates.reload(); });
   const decide = (id: string, ok: boolean) => a.run(async () => { await call('decide_rate', { p_rate: id, p_approve: ok, p_reason: ok ? null : prompt('Why refuse?') || '' }); rates.reload(); });
   const addWo = () => a.run(async () => { const m = (messes.data || []).find((x) => x.id === nw.mess)!; await save('work_orders', { company_id: s.me!.company_id, site_id: m.site_id, mess_id: m.id, contractor_id: m.contractor_id, number: nw.number, valid_from: nw.from, valid_to: nw.to, payment_days: Number(nw.days), advance_amount: Number(nw.adv), advance_recovery_pct: Number(nw.advp), security_deposit: Number(nw.sd), retention_pct: Number(nw.ret), state: 'active', created_by: s.me!.id }); wos.reload(); });
+  const setBoq = (item: string, qty: string) => a.run(async () => {
+    const n = Number(qty.replace(/,/g, ''));
+    if (!item || !Number.isFinite(n) || n < 0) throw new Error('Choose the item and type its quantity (0 or more).');
+    await call('office_boq_set', { p_work_order: w!.id, p_item: item, p_qty: n }); setBq({ item: '', qty: '' }); boq.reload();
+  });
   const addPen = () => a.run(async () => { await save('penalty_rules', { work_order_id: w!.id, code: pn.code, what: pn.what, amount: val(pn.amount), per: pn.per, valid_from: w!.valid_from }); pens.reload(); });
   return (
     <Web title={w ? w.number + ' · ' + (w.contractors?.name || '') : 'Work orders and rates'} roles={['system_admin', 'site_admin', 'accounts', 'management']}
@@ -207,6 +236,25 @@ export function WorkOrders() {
           <div className="xs" style={{ marginTop: 8 }}>A new rate waits for Accounts; approving it ends the rate before it on the day before. Nobody approves the rate he asked.</div>
         </div>
       </div>}
+      {w && (() => {
+        // the rate of each line: the approved rate on today – or, outside the work order's dates, on its nearest day
+        const ref = today() < w.valid_from ? w.valid_from : today() > w.valid_to ? w.valid_to : today();
+        const rateOf = (item: string) => (rates.data || []).find((x) => x.state === 'approved' && x.item_id === item && x.valid_from <= ref && (!x.valid_to || x.valid_to >= ref));
+        const lines = (boq.data || []).filter((x) => x.qty > 0).sort((x, y) => x.items.name.localeCompare(y.items.name));
+        const total = lines.reduce((t, x) => t + (rateOf(x.item_id) ? x.qty * rateOf(x.item_id)!.rate : 0), 0);
+        const missing = lines.filter((x) => !rateOf(x.item_id)).length;
+        return <div className="wcard"><h3>BOQ – item by item</h3>
+          <Tbl head={['Item', 'Unit', 'Quantity', 'Rate', 'Amount']} right={[2, 3, 4]} empty="No BOQ yet – add its items below"
+            rows={[...lines.map((x) => { const r = rateOf(x.item_id); return [<b>{x.items.name}</b>, x.items.unit, x.qty.toLocaleString('en-IN'),
+              r ? inr(r.rate) : <span className="chip amber" style={{ height: 22 }}>no approved rate</span>, r ? inr(x.qty * r.rate) : '–']; }),
+              ...(lines.length ? [[<b>Total</b>, '', '', '', <b>{inr(total)}</b>]] : [])]} />
+          <div className="xs" style={{ marginTop: 6 }}>Rates: the approved rate on {day(ref)} (the rates above, with their dates).{missing ? ' ' + missing + ' item(s) have no approved rate – not in the total.' : ''} Every change of a quantity is in the audit log.</div>
+          {money && <div className="row wrap" style={{ gap: 8, marginTop: 10 }}>
+            <select className="winp" value={bq.item} onChange={(e) => setBq({ ...bq, item: e.target.value, qty: String((boq.data || []).find((x) => x.item_id === e.target.value)?.qty ?? '') })} aria-label="BOQ item"><option value="">Item</option>{(items.data || []).map((x) => <option key={x.id} value={x.id}>{x.name} ({x.unit})</option>)}</select>
+            <Input value={bq.qty} onChange={(v) => setBq({ ...bq, qty: v })} placeholder="Quantity (0 = out of the BOQ)" inputMode="numeric" />
+            <button className="wbtn pri" onClick={() => setBoq(bq.item, bq.qty)} disabled={!bq.item || bq.qty.trim() === '' || a.busy}><Icon name="plus" size={16} />Set in the BOQ</button></div>}
+        </div>;
+      })()}
       {money && <div className="wcard"><h3>New work order</h3><div className="row wrap" style={{ gap: 8 }}>
         <Input value={nw.number} onChange={(v) => setNw({ ...nw, number: v })} placeholder="Number" />
         <select className="winp" value={nw.mess} onChange={(e) => setNw({ ...nw, mess: e.target.value })} aria-label="Mess"><option value="">Mess</option>{(messes.data || []).filter((m) => m.contractor_id).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>

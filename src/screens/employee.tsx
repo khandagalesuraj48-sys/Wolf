@@ -860,7 +860,7 @@ export function GuestRequest() {
   });
   return (
     <Screen>
-      <Top back={true} title="Food as a guest" sub={(mess?.name || '') + ' · no RCL ID needed'} />
+      <Top back={true} title="Food as a guest" sub={(mess?.name || '') + ' · no employee code needed'} />
       <Body style={{ gap: 12 }}>
         <div className="row" style={{ gap: 8 }}><span className={'chip' + (step === 1 ? ' on' : '')} style={{ flex: 1, justifyContent: 'center' }}>1 · Who the guest is</span><span className={'chip' + (step === 2 ? ' on' : '')} style={{ flex: 1, justifyContent: 'center' }}>2 · Meal and place</span></div>
         {step === 1 ? <>

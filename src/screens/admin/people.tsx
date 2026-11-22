@@ -62,7 +62,7 @@ export function Registrations() {
         </div>
         {r && <div className="wcard"><h3>{r.p?.full_name} · {r.code}</h3>
           <div className="col sm" style={{ gap: 8 }}>
-            {[['WhatsApp', r.p?.mobile_verified_at ? 'verified ' + day(r.p.mobile_verified_at) + ' ' + time(r.p.mobile_verified_at) : 'not proved'], ['Typed RCL ID', (r.typed_rcl_id || '–') + ' · ' + HR[r.hr_result][0].toLowerCase()],
+            {[['WhatsApp', r.p?.mobile_verified_at ? 'verified ' + day(r.p.mobile_verified_at) + ' ' + time(r.p.mobile_verified_at) : 'not proved'], ['Typed employee code', (r.typed_rcl_id || '–') + ' · ' + HR[r.hr_result][0].toLowerCase()],
               ['Works with', r.works_with || (r.p?.kind === 'employee' ? 'RCL' : '–')], ['Site · section', (s.sites.find((x) => x.id === r.site_id)?.code || '–') + ' · ' + sec(r.section_id)],
               ['Category · work', (r.category || '–') + ' · ' + (r.work_role || '–')], ['Last step', (r.last_action || '–') + (r.reason ? ' · ' + r.reason : '')]].map(([k, v]) =>
               <div key={k} className="row"><span className="sp">{k}</span><b style={{ color: 'var(--ink)' }}>{v}</b></div>)}
@@ -72,7 +72,7 @@ export function Registrations() {
           <div className="hr" style={{ margin: '14px 0' }} />
           <div className="col" style={{ gap: 8 }}>
             <div className="row" style={{ gap: 8 }}><button className="wbtn pri" style={{ flex: 1 }} onClick={() => act('verify')} disabled={a.busy}><Icon name="user-check" size={16} />Verify as employee</button><button className="wbtn" style={{ flex: 1 }} onClick={() => act('ask_hr')} disabled={a.busy}><Icon name="id-card" size={16} />Ask HR to add him</button></div>
-            <div className="row" style={{ gap: 8 }}><Input value={f.rcl} onChange={(v) => { setF({ ...f, rcl: v.toUpperCase() }); setHr(null); }} placeholder="RCL ID from HR" /><button className="wbtn" onClick={look} disabled={!f.rcl || a.busy}>Look up</button></div>
+            <div className="row" style={{ gap: 8 }}><Input value={f.rcl} onChange={(v) => { setF({ ...f, rcl: v.toUpperCase() }); setHr(null); }} placeholder="Employee code from HR" /><button className="wbtn" onClick={look} disabled={!f.rcl || a.busy}>Look up</button></div>
             {hr && <div className="row sm" style={{ gap: 8 }}><span className="sp">{hr.result === 'found' ? 'HR: ' + hr.name + (hr.designation ? ' · ' + hr.designation : '') : hr.result === 'not_checked' ? 'HR is not connected yet – check the ID with HR yourself.' : 'HR does not know this ID.'}</span>
               {(hr.result === 'found' || hr.result === 'not_checked') && <button className="wbtn" onClick={() => act('link', { rcl_id: f.rcl })} disabled={a.busy}><Icon name="users" size={16} />Link to HR record</button>}</div>}
             <div className="row" style={{ gap: 8 }}><select className="winp" style={{ flex: 1 }} value={f.section} onChange={(e) => setF({ ...f, section: e.target.value })} aria-label="Section"><option value="">Section</option>{(secs.data || []).map((x) => <option key={x.id} value={x.id}>{x.code}</option>)}</select><button className="wbtn" onClick={() => act('section', { site, section: f.section })} disabled={!f.section || a.busy}><Icon name="map-pin" size={16} />Site and section</button></div>
@@ -86,7 +86,7 @@ export function Registrations() {
           </div>
         </div>}
       </div>}
-      <div className="row xs" style={{ gap: 8 }}><Icon name="shield-check" size={14} /><span className="sp">No RCL ID is ever made here – it comes from HR. Linking keeps one person: his meals and history move with him.</span></div>
+      <div className="row xs" style={{ gap: 8 }}><Icon name="shield-check" size={14} /><span className="sp">No employee code is ever made here – it comes from HR. Linking keeps one person: his meals and history move with him.</span></div>
     </Web>
   );
 }
@@ -174,7 +174,7 @@ export function PeopleRoles() {
   const addV = () => a.run(async () => { const { error } = await db().from('vehicles').insert({ company_id: s.me!.company_id, site_id: site, reg_no: nv.reg.toUpperCase(), kind: nv.kind, capacity: nv.cap ? Number(nv.cap) : null }); if (error) throw new Error(error.message); setNv({ reg: '', kind: 'Van', cap: '' }); vans.reload(); });
   const siteCode = (id: string | null) => (id ? s.sites.find((x) => x.id === id)?.code : 'every site');
   return (
-    <Web title="People and roles" roles={['system_admin', 'site_admin']} actions={<><SitePick value={site} onChange={setSite} /><Input value={find} onChange={setFind} placeholder="Name, mobile or RCL ID" /></>}>
+    <Web title="People and roles" roles={['system_admin', 'site_admin']} actions={<><SitePick value={site} onChange={setSite} /><Input value={find} onChange={setFind} placeholder="Name, mobile or employee code" /></>}>
       {people.loading && !people.data ? <Loading /> : people.error ? <Failed error={people.error} retry={people.reload} /> : <div className="g2" style={{ gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr)' }}>
         <div className="wcard" style={{ padding: '8px 8px 0' }}>
           <Tbl head={['Person', 'Kind', 'Status', 'Roles']} hl={(i) => shown[i]?.id === p?.id} empty="Nobody on this site yet"
@@ -308,7 +308,7 @@ export function HrPeople() {
   return (
     <Web title="Employees from HR" roles={['system_admin', 'site_admin', 'management']}
       actions={<><select className="wbtn" value={site} onChange={(e) => setSite(e.target.value)} aria-label="Site"><option value="">All sites</option>{sites.map((x) => <option key={x.site || '-'} value={x.site || ''}>{x.site || '(no site)'}</option>)}</select>
-        <Input value={find} onChange={setFind} placeholder="Name or RCL ID" />
+        <Input value={find} onChange={setFind} placeholder="Name or employee code" />
         {s.has('system_admin') && <button className="wbtn pri" onClick={now} disabled={a.busy}><Icon name="refresh-cw" size={16} />Bring from HR now</button>}</>}>
       <ErrorLine error={a.error} />
       {st.error ? <Failed error={st.error} retry={st.reload} /> : <div className="kpis">
@@ -320,12 +320,12 @@ export function HrPeople() {
       </div>}
       <div className="wcard" style={{ padding: '8px 8px 0' }}>
         {list.loading && !list.data ? <Loading /> : list.error ? <Failed error={list.error} retry={list.reload} /> :
-          <Tbl head={['RCL ID', 'Name', 'Designation', 'Site', 'Mobile', 'In HR', 'In FALCON']} empty={st.data?.last_ok ? 'Nobody matches' : 'HR\'s list has not come yet – it comes every hour once HR is connected (docs/DEPLOYMENT.md)'}
+          <Tbl head={['Employee code', 'Name', 'Designation', 'Site', 'Mobile', 'In HR', 'In FALCON']} empty={st.data?.last_ok ? 'Nobody matches' : 'HR\'s list has not come yet – it comes every hour once HR is connected (docs/DEPLOYMENT.md)'}
             rows={(list.data || []).map((x) => [<b>{x.rcl_id || '–'}</b>, x.full_name, x.designation || x.category || '–', x.site_code || '–', x.mobile || '–',
               <span className={'chip ' + tone(x)} style={{ height: 24 }}>{x.gone ? 'not in HR now' : x.status === 'left' ? 'Relieved ' + day(x.left_on) : HR_WORD[x.status] || x.status}</span>,
               x.in_falcon ? <span className={'chip ' + (x.in_falcon === 'suspended' ? 'red' : 'leaf')} style={{ height: 24 }}>{x.in_falcon}</span> : <span className="xs">signs in with his mobile</span>])} />}
       </div>
-      <div className="row xs" style={{ gap: 8 }}><Icon name="shield-check" size={14} /><span className="sp">HR stays the master – nothing here changes HR. Only RCL ID, name, designation, category, site, mobile and status come from HR; never birth date, e-mail, KYC, bank, pay or photo. Everybody in HR's list who has not left can sign in with his mobile – HR's "Incomplete" / "Complete" (not yet activated) is only shown. A new site of HR comes by itself; who left in HR cannot order meals.</span></div>
+      <div className="row xs" style={{ gap: 8 }}><Icon name="shield-check" size={14} /><span className="sp">HR stays the master – nothing here changes HR. Only the employee code, name, designation, category, site, mobile and status come from HR; never birth date, e-mail, KYC, bank, pay or photo. Everybody in HR's list who has not left can sign in with his mobile – HR's "Incomplete" / "Complete" (not yet activated) is only shown. A new site of HR comes by itself; who left in HR cannot order meals.</span></div>
     </Web>
   );
 }

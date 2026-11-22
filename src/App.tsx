@@ -68,7 +68,9 @@ export function App() {
           <Route path="/" element={<Root />} />
           <Route path="/setup" element={<Setup />} />
           <Route path="/start" element={<Start.Who />} />
+          <Route path="/start/employee" element={<Start.RclId />} />
           <Route path="/start/rcl-id" element={<Start.RclId />} />
+          <Route path="/start/contractor" element={<Start.Contractor />} />
           <Route path="/start/found" element={<Start.Found />} />
           <Route path="/start/code" element={<Start.Code />} />
           <Route path="/start/done" element={<Start.Done />} />
