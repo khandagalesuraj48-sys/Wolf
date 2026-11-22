@@ -303,3 +303,53 @@ language sql stable security definer set search_path = '' as $$
 $$;
 revoke all on function public.driver_trip(uuid) from public, anon;
 grant execute on function public.driver_trip(uuid) to authenticated;
+
+-- ── the office's web (w01, w07, w12): counts by site and day – only for sites where he has an office role ─────────────────
+create or replace function public.office_stats(p_from date, p_to date)
+returns table (site_id uuid, mess_id uuid, service_date date, breakfast integer, lunch integer, snacks integer, dinner integer, meals integer,
+               guests integer, parcels integer, not_confirmed integer, failed integer, cancelled integer, short integer)
+language sql stable security definer set search_path = '' as $$
+  select o.site_id, o.mess_id, l.service_date,
+    count(*) filter (where l.is_meal and l.meal = 'breakfast' and l.state in ('served', 'delivered', 'short'))::integer,
+    count(*) filter (where l.is_meal and l.meal = 'lunch' and l.state in ('served', 'delivered', 'short'))::integer,
+    count(*) filter (where l.is_meal and l.meal = 'snacks' and l.state in ('served', 'delivered', 'short'))::integer,
+    count(*) filter (where l.is_meal and l.meal = 'dinner' and l.state in ('served', 'delivered', 'short'))::integer,
+    count(*) filter (where l.is_meal and l.state in ('served', 'delivered', 'short'))::integer,
+    count(*) filter (where l.is_meal and o.guest_visit_id is not null and l.state in ('served', 'delivered', 'short'))::integer,
+    count(*) filter (where l.is_meal and o.kind in ('parcel', 'delivery') and l.state in ('delivered', 'short'))::integer,
+    count(*) filter (where l.state in ('served', 'delivered', 'short') and not exists (select 1 from public.confirmations c where c.order_line_id = l.id))::integer,
+    count(*) filter (where l.state = 'failed')::integer,
+    count(*) filter (where l.is_meal and l.state = 'cancelled')::integer,
+    coalesce(sum(l.short_qty) filter (where l.state = 'short'), 0)::integer
+  from public.order_lines l join public.orders o on o.id = l.order_id
+  where l.service_date between p_from and p_to and o.company_id = public.my_company()
+    and public.has_role(array['site_admin', 'mess_supervisor', 'accounts', 'management', 'system_admin']::public.app_role[], o.site_id)
+  group by o.site_id, o.mess_id, l.service_date
+$$;
+
+-- On-time deliveries (a stop reached by its ETA + the late minutes) and ratings – for the dashboard and the scorecard.
+create or replace function public.office_delivery(p_from date, p_to date)
+returns table (mess_id uuid, stops integer, on_time integer, batches integer, late_batches integer)
+language sql stable security definer set search_path = '' as $$
+  select x.mess_id, count(t.*)::integer,
+    count(*) filter (where t.reached_at is not null and (t.eta is null or t.reached_at <= t.eta + make_interval(mins => public.setting_int(x.company_id, 'delivery.late_minutes', x.service_date, 30))))::integer,
+    count(distinct x.id)::integer,
+    count(distinct x.id) filter (where t.reached_at > t.eta + make_interval(mins => public.setting_int(x.company_id, 'delivery.late_minutes', x.service_date, 30)))::integer
+  from public.batches x join public.batch_stops t on t.batch_id = x.id
+  where x.service_date between p_from and p_to and x.company_id = public.my_company() and x.state = 'completed'
+    and public.has_role(array['site_admin', 'mess_supervisor', 'accounts', 'management', 'system_admin']::public.app_role[], x.site_id)
+  group by x.mess_id
+$$;
+
+create or replace function public.office_ratings(p_from date, p_to date)
+returns table (mess_id uuid, reviews integer, overall numeric, taste numeric, quantity numeric, hot numeric, delivery numeric)
+language sql stable security definer set search_path = '' as $$
+  select o.mess_id, count(*)::integer, round(avg(r.overall), 1), round(avg(r.taste), 1), round(avg(r.quantity), 1), round(avg(r.hot), 1), round(avg(r.delivery), 1)
+  from public.reviews r join public.orders o on o.id = r.order_id
+  where o.service_date between p_from and p_to and o.company_id = public.my_company()
+    and public.has_role(array['site_admin', 'mess_supervisor', 'accounts', 'management', 'system_admin']::public.app_role[], o.site_id)
+  group by o.mess_id
+$$;
+
+revoke all on function public.office_stats(date, date), public.office_delivery(date, date), public.office_ratings(date, date) from public, anon;
+grant execute on function public.office_stats(date, date), public.office_delivery(date, date), public.office_ratings(date, date) to authenticated;
