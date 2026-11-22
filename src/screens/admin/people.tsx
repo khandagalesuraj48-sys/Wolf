@@ -312,7 +312,7 @@ export function HrPeople() {
         {s.has('system_admin') && <button className="wbtn pri" onClick={now} disabled={a.busy}><Icon name="refresh-cw" size={16} />Bring from HR now</button>}</>}>
       <ErrorLine error={a.error} />
       {st.error ? <Failed error={st.error} retry={st.reload} /> : <div className="kpis">
-        <Kpi label="In HR · active" value={numOf(sites.reduce((t, x) => t + x.active, 0))} note={sites.length + ' sites'} tone="leaf" />
+        <Kpi label="In HR · not left" value={numOf(sites.reduce((t, x) => t + x.active, 0))} note={sites.length + ' sites · ' + numOf(sites.reduce((t, x) => t + x.other, 0)) + ' still pending in HR'} tone="leaf" />
         <Kpi label="Already in FALCON" value={numOf(sites.reduce((t, x) => t + x.in_falcon, 0))} note="they sign in with their mobile" />
         <Kpi label="Left in HR" value={numOf(sites.reduce((t, x) => t + x.left, 0))} note="stopped in FALCON" tone="red" />
         <Kpi label="Last copy" value={st.data?.last_ok ? day(st.data.last_ok) + ' ' + time(st.data.last_ok) : 'not yet'} tone={l && !l.ok ? 'red' : 'muted'}
@@ -325,7 +325,7 @@ export function HrPeople() {
               <span className={'chip ' + tone(x)} style={{ height: 24 }}>{x.gone ? 'not in HR now' : x.status === 'left' ? 'left ' + day(x.left_on) : x.status}</span>,
               x.in_falcon ? <span className={'chip ' + (x.in_falcon === 'suspended' ? 'red' : 'leaf')} style={{ height: 24 }}>{x.in_falcon}</span> : <span className="xs">signs in with his mobile</span>])} />}
       </div>
-      <div className="row xs" style={{ gap: 8 }}><Icon name="shield-check" size={14} /><span className="sp">HR stays the master – nothing here changes HR. Only RCL ID, name, designation, category, site, mobile and status come from HR; never birth date, e-mail, KYC, bank, pay or photo. A new site of HR comes by itself; who left in HR cannot order meals.</span></div>
+      <div className="row xs" style={{ gap: 8 }}><Icon name="shield-check" size={14} /><span className="sp">HR stays the master – nothing here changes HR. Only RCL ID, name, designation, category, site, mobile and status come from HR; never birth date, e-mail, KYC, bank, pay or photo. Everybody in HR's list who has not left can sign in with his mobile – HR's "pending" / "incomplete" is only shown. A new site of HR comes by itself; who left in HR cannot order meals.</span></div>
     </Web>
   );
 }

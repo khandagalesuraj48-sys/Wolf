@@ -40,15 +40,15 @@ set local role service_role;
 select pg_temp.ok(public.server_hr_find('TST', 'RCL-0007') ->> 'result' = 'not_checked', 'nothing kept yet: "not checked"');
 insert into t select 'sync1', public.server_hr_sync('TST', '[
   {"id":"h1","code":"rcl-0007","name":"Ganesh Shinde","designation":"Driver","category":"driver","site":"S1","mobile":"9800000044","status":"active","left":""},
-  {"id":"h2","code":"RCL-0009","name":"Kiran Jadhav","designation":"Fitter","category":"staff","site":"B18","mobile":"9800000055","status":"active","left":""},
-  {"id":"h3","code":"RCL-0010","name":"New Joiner","designation":"","category":"labour","site":"S2","mobile":"","status":"pending","left":""},
+  {"id":"h2","code":"RCL-0009","name":"Kiran Jadhav","designation":"Fitter","category":"staff","site":"B18","mobile":"9800000055","status":"incomplete","left":""},
+  {"id":"h3","code":"RCL-0010","name":"New Joiner","designation":"","category":"labour","site":"S3","mobile":"","status":"pending","left":""},
   {"id":"h4","code":"RCL-0011","name":"One Letter Site","category":"staff","site":"Z","mobile":"9800000066","status":"active"},
   {"id":"","code":"RCL-0099","name":"No id – left out"}
 ]', 'timer')::text;
 reset role;
 select pg_temp.ok((select (v::jsonb ->> 'total')::int = 5 and (v::jsonb ->> 'added')::int = 4 from t where k = 'sync1'), 'HR''s list is kept (a row without HR''s key is left out)');
 select pg_temp.ok((select rcl_id = 'RCL-0007' and mobile = '+919800000044' and site_code = 'S1' from public.hr_people where hr_id = 'h1'), 'the RCL ID and the mobile in FALCON''s form');
-select pg_temp.ok((select v::jsonb -> 'new_sites' = '["B18"]'::jsonb from t where k = 'sync1'), 'a new site of HR is made in FALCON by itself');
+select pg_temp.ok((select v::jsonb -> 'new_sites' = '["B18", "S3"]'::jsonb from t where k = 'sync1'), 'a new site of HR is made in FALCON by itself – also for a new joiner not yet complete in HR');
 select pg_temp.ok(exists (select 1 from public.sites where company_id = '10000000-0000-0000-0000-000000000001' and code = 'B18'), 'B18 is a FALCON site now');
 select pg_temp.ok(not exists (select 1 from public.sites where code = 'Z'), 'a site code FALCON cannot take is not made up');
 select pg_temp.ok(exists (select 1 from public.notifications n join public.people p on p.id = n.person_id
@@ -58,7 +58,7 @@ select pg_temp.ok((select count(*) from public.hr_sync_runs where ok) = 1, 'the 
 -- ── the RCL ID look-up from the kept list ──
 set local role service_role;
 select pg_temp.ok(public.server_hr_find('TST', 'rcl-0007', '+919800000044') @> '{"result":"found","name":"Ganesh Shinde","mobile_matches":true}', 'found, with his own mobile');
-select pg_temp.ok(public.server_hr_find('TST', 'RCL-0010') ->> 'result' = 'maybe', 'not active in HR yet: "maybe" – the Site Admin checks');
+select pg_temp.ok(public.server_hr_find('TST', 'RCL-0010') @> '{"result":"found","hr_status":"pending"}', 'a new joiner still "pending" in HR is an RCL employee too (not left)');
 select pg_temp.ok(public.server_hr_find('TST', 'RCL-4040') ->> 'result' = 'not_found', 'an unknown RCL ID: not found');
 select pg_temp.ok(public.server_hr_find('OTH', 'RCL-0007') ->> 'result' = 'not_checked', 'another company never sees this list');
 
@@ -80,13 +80,14 @@ select pg_temp.ok((select count(*) from public.people where rcl_id = 'RCL-0007')
 
 -- ── who left in HR is stopped; back to active is let in again; the name follows HR ──
 set local role service_role;
-insert into t select 'w4', public.server_welcome('51000000-0000-0000-0000-000000000004', 'TST', null)::text;   -- Kiran, active now
+insert into t select 'w4', public.server_welcome('51000000-0000-0000-0000-000000000004', 'TST', null)::text;   -- Kiran, "incomplete" in HR – not left
 insert into t select 'sync2', public.server_hr_sync('TST', '[
   {"id":"h1","code":"RCL-0007","name":"Ganesh B. Shinde","designation":"Driver","category":"driver","site":"S1","mobile":"9800000044","status":"active"},
   {"id":"h2","code":"RCL-0009","name":"Kiran Jadhav","category":"staff","site":"B18","mobile":"9800000055","status":"left","left":"2026-11-20"},
   {"id":"h4","code":"RCL-0011","name":"One Letter Site","category":"staff","site":"Z","mobile":"9800000066","status":"active"}
 ]', 'office')::text;
 reset role;
+select pg_temp.ok((select v::jsonb ->> 'how' = 'hr' from t where k = 'w4'), 'an employee still "incomplete" in HR is known by his mobile too');
 select pg_temp.ok((select state = 'suspended' and state_reason = 'Left the company in HR on 20 Nov 2026' from public.people where rcl_id = 'RCL-0009'), 'who LEFT in HR is stopped in FALCON, with the day');
 select pg_temp.ok((select full_name = 'Ganesh B. Shinde' from public.people where rcl_id = 'RCL-0007'), 'the name follows HR');
 select pg_temp.ok((select gone from public.hr_people where hr_id = 'h3'), 'no longer in HR''s list: marked gone, kept');

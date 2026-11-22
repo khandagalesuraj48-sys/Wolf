@@ -4,9 +4,12 @@
 --   * hr_people: every employee of every site as HR gives it (RCL ID, name, designation, category, site, mobile, status, left day) –
 --     never birth date, e-mail, KYC, bank, pay, photo or face. Read only by FALCON's server; the office sees it with the mobile masked.
 --   * server_hr_sync: the hourly copy – a new site of HR becomes a FALCON site by itself (its mess and sections are the System
---     Admin's); an employee who LEFT in HR is stopped in FALCON (and let in again when HR makes him active again); names follow HR.
---   * server_welcome: after a WhatsApp code – a person already known; a FALCON person with that mobile; an ACTIVE HR employee with
---     that mobile (made at once – no registration form, no Site Admin check); the first System Admin (only while there is none).
+--     Admin's); an employee who LEFT in HR is stopped in FALCON (and let in again when HR takes the "left" back); names follow HR.
+--   * server_welcome: after a WhatsApp code – a person already known; a FALCON person with that mobile; an HR employee with that
+--     mobile who has not LEFT (made at once – no registration form, no Site Admin check); the first System Admin (only while there is
+--     none).
+--   (23-11-2026, the first copy: all 86 of HR's people were "pending" or "incomplete" in HR – HR's own steps of activation. His word
+--   was ALL of RCL's employees, a new joiner too, so every employee in HR's list counts unless he LEFT; HR's statuses are only shown.)
 -- Safe to run again.
 
 create table if not exists public.hr_people (
@@ -98,7 +101,7 @@ begin
   get diagnostics n_gone = row_count;
 
   -- a new site of HR becomes a FALCON site (its code; the System Admin names it and sets its mess and sections)
-  for s in select distinct h.site_code from public.hr_people h where h.company_id = c.id and not h.gone and h.status = 'active'
+  for s in select distinct h.site_code from public.hr_people h where h.company_id = c.id and not h.gone and h.status <> 'left'
              and h.site_code ~ '^[A-Z0-9-]{2,16}$' and not exists (select 1 from public.sites t where t.company_id = c.id and t.code = h.site_code)
            order by 1 loop
     insert into public.sites (company_id, code, name) values (c.id, s, s) returning id into site_;
@@ -107,7 +110,7 @@ begin
       'Give it its name, its mess and its sections in FALCON.', '/admin/sites');
   end loop;
 
-  -- FALCON's people of an RCL ID: the name follows HR; who LEFT (or is no longer in HR) is stopped; back to active = let in again
+  -- FALCON's people of an RCL ID: the name follows HR; who LEFT (or is no longer in HR) is stopped; "left" taken back = let in again
   for r in select p.id, p.state, p.state_reason, p.full_name, h.full_name hr_name, h.status, h.left_on, h.gone
            from public.people p join public.hr_people h on h.company_id = p.company_id and h.rcl_id = p.rcl_id
            where p.company_id = c.id and p.kind = 'employee' loop
@@ -117,7 +120,7 @@ begin
          where id = r.id;
         n_stopped := n_stopped + 1;
       end if;
-    elsif r.status = 'active' then
+    else
       if r.state = 'suspended' and r.state_reason like 'Left the company in HR%' then
         update public.people set state = 'linked', state_reason = null where id = r.id;
         n_released := n_released + 1;
@@ -147,7 +150,7 @@ begin
   if not found or not exists (select 1 from public.hr_people where company_id = c.id) then return jsonb_build_object('result', 'not_checked'); end if;
   select * into h from public.hr_people where company_id = c.id and rcl_id = upper(trim(p_rcl_id)) and not gone;
   if not found or h.status = 'left' then return jsonb_build_object('result', 'not_found'); end if;
-  return jsonb_build_object('result', case when h.status = 'active' then 'found' else 'maybe' end, 'name', h.full_name,
+  return jsonb_build_object('result', 'found', 'hr_status', h.status, 'name', h.full_name,
     'designation', h.designation, 'category', h.category, 'site', h.site_code, 'ref', h.hr_id, 'mobile', h.mobile,
     'mobile_matches', h.mobile is not null and h.mobile = p_mobile);
 end $$;
@@ -170,7 +173,7 @@ begin
       update public.people set auth_user_id = p_auth_user, mobile_verified_at = now() where id = p.id returning * into p;
       how := 'mobile';
     else
-      select * into h from public.hr_people where company_id = c.id and mobile = ph and status = 'active' and not gone and rcl_id is not null
+      select * into h from public.hr_people where company_id = c.id and mobile = ph and status <> 'left' and not gone and rcl_id is not null
         order by seen_at desc limit 1;
       if found and not exists (select 1 from public.people where company_id = c.id and rcl_id = h.rcl_id) then
         select id into site_ from public.sites where company_id = c.id and code = h.site_code;
@@ -209,7 +212,7 @@ language sql stable security definer set search_path = '' as $$
     'last', (select to_jsonb(r) - 'company_id' from public.hr_sync_runs r where r.company_id = public.my_company() order by at desc limit 1),
     'last_ok', (select max(at) from public.hr_sync_runs r where r.company_id = public.my_company() and ok),
     'sites', coalesce((select jsonb_agg(jsonb_build_object('site', site_code, 'active', a, 'left', l, 'other', o, 'in_falcon', f) order by site_code)
-      from (select h.site_code, count(*) filter (where h.status = 'active' and not h.gone) a, count(*) filter (where h.status = 'left' or h.gone) l,
+      from (select h.site_code, count(*) filter (where h.status <> 'left' and not h.gone) a, count(*) filter (where h.status = 'left' or h.gone) l,
                    count(*) filter (where h.status in ('incomplete', 'pending') and not h.gone) o,
                    count(*) filter (where exists (select 1 from public.people p where p.company_id = h.company_id and p.rcl_id = h.rcl_id)) f
             from public.hr_people h where h.company_id = public.my_company() group by h.site_code) x), '[]')) end
