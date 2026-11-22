@@ -2,9 +2,9 @@
 
 ## Waiting for his decision (docs/DECISIONS.md → "Not decided yet")
 
-1. **The LION one sign-in** works only after the Portal has the module `falcon` (a change in `rcl-portal`) and `PORTAL_URL` is
-   set. Until then everybody uses FALCON's own WhatsApp code sign-in, and the first System Admin can only be made by the Portal's
-   Super Admin – so **the Portal's module is needed before FALCON can be set up**.
+1. **FALCON is separate from the ERP for now** (his decision of 23-11-2026): the LION one sign-in stays off (no `PORTAL_URL`)
+   and everybody uses FALCON's own WhatsApp code sign-in. **The first System Admin** then needs its own way (decision 0) – inside
+   FALCON only a System Admin gives roles.
 2. **HR look-up** is not connected (a change in `rcl-hr`): every RCL ID answers "not checked", the person registers as new and
    waits for the Site Admin; "present today" is not counted from HR.
 3. **WhatsApp code** needs FALCON's own `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` and the approved template `otp`; without
