@@ -32,6 +32,7 @@
 | Date | File | What |
 |---|---|---|
 | 23-11-2026 | `supabase/updates/2026-11-23_hr_people.sql` | HR's employees in FALCON and the first System Admin (part 0013). Tested on a copy with the master of 23-11-2026 and the seed: run twice, then every test (162 checks) |
+| 23-11-2026 | `supabase/updates/2026-11-23b_hr_not_left.sql` | Every employee in HR's list who has NOT LEFT counts (the first copy: all 86 were "pending" / "incomplete" in HR). Part 0013's functions again. Tested on a copy with the first master, the seed and the first update: run twice, then every test (163 checks) |
 
 ## Running it (his step)
 

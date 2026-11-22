@@ -6,8 +6,8 @@ What was run, on what, and what was **not** run. Every command had a time limit.
 
 | What | How | Result |
 |---|---|---|
-| The database, part by part | `supabase/test/run.sh` – a new throwaway Postgres 16 database with a stand-in of Supabase (`auth`, `storage`, roles, the Realtime publication); every migration run **twice**; then the test files | migrations ran twice with no error; **162 checks passed** (0001: 35 · 0002: 30 · 0003: 53 · 0012: 8 · 0013: 36) |
-| The master SQL as he will run it | `supabase/test/run_master.sh` – a new clean database; `FALCON_MASTER.sql` run once, then again; `seed.sql` twice; then every test file against that database | first run and second run with no error; seed twice with no error (7 items); **47 tables, 0 without Row Level Security**; **162 checks passed** |
+| The database, part by part | `supabase/test/run.sh` – a new throwaway Postgres 16 database with a stand-in of Supabase (`auth`, `storage`, roles, the Realtime publication); every migration run **twice**; then the test files | migrations ran twice with no error; **163 checks passed** (0001: 35 · 0002: 30 · 0003: 53 · 0012: 8 · 0013: 37) |
+| The master SQL as he will run it | `supabase/test/run_master.sh` – a new clean database; `FALCON_MASTER.sql` run once, then again; `seed.sql` twice; then every test file against that database | first run and second run with no error; seed twice with no error (7 items); **47 tables, 0 without Row Level Security**; **163 checks passed** |
 | The server's own steps | `npm test` (vitest): the Portal ticket check (signature, `aud`, `exp`, issuer), the Supabase hook signature, the WhatsApp code message, the RCL ID look-up in the kept copy, HR's list read page by page with its secret, `FALCON_FIRST_ADMIN`, the browser's settings check | **22 passed** |
 | The update of 23-11-2026 on a live-like database | the master of the first run + the seed, then `supabase/updates/2026-11-23_hr_people.sql` twice, then every test file | both runs with no error; 162 checks passed; 0 tables without RLS |
 | Types | `npx tsc --noEmit` | no error |
@@ -32,7 +32,7 @@ What was run, on what, and what was **not** run. Every command had a time limit.
   meals at his mess only; HR's ID linked later – his meals stay his; the Portal's Super Admin is FALCON's System Admin; only the
   server can say "found in HR".
 * HR's employees: only FALCON's server copies, finds and welcomes; the list is never read from the app; a new HR site is made and the
-  System Admin told; a site code FALCON cannot take is not made up; an active HR employee is known by his mobile (RCL ID, name,
+  System Admin told; a site code FALCON cannot take is not made up; an HR employee who has not left (also "pending" / "incomplete" in HR) is known by his mobile (RCL ID, name,
   site, designation) and never twice; who left is stopped with the day, and let in again when active; a Site Admin's own
   suspension is never undone by HR; an empty list changes nothing; the first System Admin only from the set mobile, only once.
 * A dated setting: only the System Admin; never backwards; the old value ends the day before and stays; the complaint answer

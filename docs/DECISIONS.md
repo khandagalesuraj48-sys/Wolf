@@ -69,8 +69,10 @@ Every decision here is the owner's. The newest wins. Nothing is built that is no
 * **HR's employees in FALCON** ("HR cha data base FALCON la connect kr … all RCL che je astil … new site … new employee HR madhe aala
   tri te yat yeyla hawa" – and his yes to the plan): HR gives FALCON's server only RCL ID, name, designation, category, site, mobile,
   status, left day (`rcl-hr` api/falcon-employees, its own secret); FALCON keeps that list and copies it every hour; HR stays the
-  master and is never changed from FALCON. An active HR employee is known by his mobile after a WhatsApp code (no form, no Site
+  master and is never changed from FALCON. An HR employee is known by his mobile after a WhatsApp code (no form, no Site
   Admin check); a new HR site becomes a FALCON site; who left in HR is stopped; people not in HR register as before.
+  (The first copy, 23-11-2026 03:19: 86 people, every one "pending" or "incomplete" in HR – so, by his word "all RCL employees … a new
+  employee too", everybody in HR's list counts unless he LEFT; HR's own status is only shown.)
 * **The phone app is Flutter** ("APK … flutter ni banawleli asawi proper"; repository `khandagalesuraj48-sys/FALCONAPK`): the app's
   own screens, not the web shown inside; package `si.sketchline.falcon`.
 
