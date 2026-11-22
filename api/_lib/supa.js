@@ -29,3 +29,10 @@ export function asCaller(token) {
   if (!url || !key) throw new Fail(503, 'FALCON is not connected to its database yet (Vercel settings).', 'settings');
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: 'Bearer ' + token } } });
 }
+
+// A plain client with the publishable key (sign-in calls Supabase makes for anyone).
+export function publicClient() {
+  const url = supabaseUrl(), key = env('VITE_SUPABASE_PUBLISHABLE_KEY');
+  if (!url || !key) throw new Fail(503, 'FALCON is not connected to its database yet (Vercel settings).', 'settings');
+  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+}

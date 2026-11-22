@@ -50,6 +50,33 @@ exception when unique_violation then
   return false;
 end $$;
 
+-- "Is this you?" before the code (r02 → r03 → r04): HR's mobile stays on the server; the browser holds only a 10-minute token.
+create table if not exists public.start_tokens (
+  token_hash text primary key check (token_hash ~ '^[0-9a-f]{64}$'),
+  phone      text not null check (phone ~ '^\+[1-9][0-9]{7,14}$'),
+  rcl_id     text not null,
+  hr         jsonb not null,
+  exp        timestamptz not null
+);
+alter table public.start_tokens enable row level security;               -- no rule: only the server
+revoke all on public.start_tokens from anon, authenticated;
+
+create or replace function public.server_start_token(p_phone text, p_rcl text, p_hr jsonb) returns text
+language plpgsql security definer set search_path = '' as $$
+declare t text := encode(extensions.gen_random_bytes(24), 'hex');
+begin
+  delete from public.start_tokens where exp < now();
+  insert into public.start_tokens (token_hash, phone, rcl_id, hr, exp)
+  values (encode(extensions.digest(t, 'sha256'), 'hex'), p_phone, upper(p_rcl), p_hr - 'mobile', now() + interval '10 minutes');
+  return t;
+end $$;
+
+create or replace function public.server_start_resolve(p_token text) returns jsonb
+language sql security definer set search_path = '' as $$
+  select jsonb_build_object('phone', phone, 'rcl_id', rcl_id, 'hr', hr) from public.start_tokens
+  where token_hash = encode(extensions.digest(p_token, 'sha256'), 'hex') and exp > now()
+$$;
+
 -- ── the server's steps (service role only – the browser can never claim "found in HR") ───────────────────────────────────
 -- A verified company employee coming with his LION sign-in: found by his Portal user ID, or by his mobile when he registered
 -- here before (the same person – no second record), or made now. The Portal's Super Admin is FALCON's System Admin.
@@ -252,6 +279,26 @@ begin
   if not found then raise exception 'Nothing was asked of you.' using errcode = '22023'; end if;
 end $$;
 
+-- The places to choose from when registering (before one is signed in): sites, circles and sections – codes and names only.
+create or replace function public.start_places(p_company text) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object('company', c.id, 'name', c.name, 'sites', coalesce((
+    select jsonb_agg(jsonb_build_object('id', s.id, 'code', s.code, 'name', s.name, 'sections', coalesce((
+      select jsonb_agg(jsonb_build_object('id', x.id, 'code', x.code, 'name', x.name, 'circle', ci.code) order by ci.code, x.code)
+      from public.sections x join public.circles ci on ci.id = x.circle_id where x.site_id = s.id and x.active), '[]')) order by s.code)
+    from public.sites s where s.company_id = c.id and s.active), '[]'))
+  from public.companies c where c.code = upper(p_company) and c.active
+$$;
+grant execute on function public.start_places(text) to anon, authenticated;
+
+-- A person always learns where he stands – also when he is suspended, rejected or his temporary access ended (the rules then
+-- show him nothing else).
+create or replace function public.my_standing() returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object('state', state, 'reason', state_reason, 'until', temporary_until, 'name', full_name)
+  from public.people where auth_user_id = auth.uid()
+$$;
+
 -- The Site Admin lets a person ask meals for others (a group request), or takes it back.
 create or replace function public.allow_group(p_person uuid, p_allow boolean) returns void
 language plpgsql security definer set search_path = '' as $$
@@ -318,15 +365,15 @@ create policy registrations_read on public.registrations for select to authentic
 revoke all on public.registrations from anon, authenticated;
 grant select on public.registrations to authenticated;
 
-revoke all on function public.server_use_ticket(text, timestamptz), public.server_portal_person(text, text, text, uuid, text, text, boolean),
+revoke all on function public.server_start_token(text, text, jsonb), public.server_start_resolve(text), public.server_use_ticket(text, timestamptz), public.server_portal_person(text, text, text, uuid, text, text, boolean),
   public.server_register(uuid, text, public.person_kind, text, uuid, uuid, text, jsonb, text, text, text, text, text, text),
   public.server_device(uuid, text, boolean), public.merge_people(uuid, uuid, text),
   public.decide_registration(uuid, text, jsonb, text), public.answer_registration(uuid, text), public.allow_group(uuid, boolean),
   public.grant_role(uuid, public.app_role, uuid, uuid, date, date), public.revoke_role(uuid, text),
   public.add_contractor_person(text, text, uuid, text) from public, anon, authenticated;
-grant execute on function public.server_use_ticket(text, timestamptz), public.server_portal_person(text, text, text, uuid, text, text, boolean),
+grant execute on function public.server_start_token(text, text, jsonb), public.server_start_resolve(text), public.server_use_ticket(text, timestamptz), public.server_portal_person(text, text, text, uuid, text, text, boolean),
   public.server_register(uuid, text, public.person_kind, text, uuid, uuid, text, jsonb, text, text, text, text, text, text),
   public.server_device(uuid, text, boolean) to service_role;
-grant execute on function public.decide_registration(uuid, text, jsonb, text), public.answer_registration(uuid, text),
+grant execute on function public.my_standing(), public.decide_registration(uuid, text, jsonb, text), public.answer_registration(uuid, text),
   public.allow_group(uuid, boolean), public.grant_role(uuid, public.app_role, uuid, uuid, date, date), public.revoke_role(uuid, text),
   public.add_contractor_person(text, text, uuid, text) to authenticated;

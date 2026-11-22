@@ -71,7 +71,7 @@ create table if not exists public.orders (
   ready_at       timestamptz,
   created_at     timestamptz not null default now(),
   check ((kind = 'delivery') = (to_section_id is not null)),
-  check ((guest_visit_id is null) = (host_state = 'not_needed')),
+  check (guest_visit_id is not null or host_state = 'not_needed'),
   check (state <> 'refused' or length(trim(coalesce(refused_reason, ''))) > 0)
 );
 create index if not exists orders_mess_day on public.orders (mess_id, service_date, meal);
@@ -244,7 +244,7 @@ begin
       insert into public.orders (code, company_id, site_id, mess_id, kind, meal, service_date, requested_by, is_group,
                                  guest_visit_id, host_state, to_section_id, note)
       values (public.next_code('order:' || s.id, 'MS-' || s.code || '-'), who.company_id, m.site_id, m.id, p_kind, p_meal, p_date, me,
-              group_, v.id, case when v.id is null then 'not_needed' else 'waiting' end::public.host_state, p_section, p_note)
+              group_, v.id, case when v.id is null or v.host_id is null then 'not_needed' else 'waiting' end::public.host_state, p_section, p_note)
       returning * into o;
     end if;
     insert into public.order_lines (order_id, person_id, item_id, is_meal, service_date, meal, qty)

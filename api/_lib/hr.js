@@ -12,7 +12,10 @@ export async function hrLookup(rclId, mobile, fetchImpl = fetch) {
     if (!r.ok) return { result: 'not_checked' };
     const j = await r.json();
     const result = ['found', 'not_found', 'maybe'].includes(j.result) ? j.result : 'not_checked';
-    return { result, name: str(j.name), designation: str(j.designation), ref: str(j.ref), mobile_matches: j.mobile_matches === true };
+    // "mobile" stays on the server (the code is sent to it); the rest is what a person needs to recognise himself
+    return { result, name: str(j.name), designation: str(j.designation), department: str(j.department), category: str(j.category),
+      site: str(j.site), ref: str(j.ref), mobile: /^\+?[0-9]{10,15}$/.test(String(j.mobile || '')) ? '+' + String(j.mobile).replace(/^\+/, '') : undefined,
+      mobile_matches: j.mobile_matches === true };
   } catch {
     return { result: 'not_checked' };
   }
