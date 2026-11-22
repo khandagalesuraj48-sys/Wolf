@@ -40,7 +40,7 @@ piece of work.
 | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID` | yes | no | Meta → WhatsApp → the same number as the ERP's (decision 3) |
 | `WHATSAPP_OTP_TEMPLATE`, `WHATSAPP_OTP_LANG` | `otp`, `en` | – | the approved authentication template (body code + copy-code button) |
 | `PORTAL_URL` | the Portal's address | – | only when the Portal's module `falcon` is there (decision 1) |
-| `HR_EMPLOYEES_URL` | `https://oneclicksolution.online/hr/api/falcon-employees` | – | HR's list for FALCON (an address, not a secret) |
+| `HR_EMPLOYEES_URL` | `https://rcl-hr.vercel.app/api/falcon-employees` | – | HR's list for FALCON (an address, not a secret) – HR's own address, as the ERP's server asks HR; not through `oneclicksolution.online/hr`, which may not pass the secret on |
 | `HR_FALCON_SECRET` | a long random word (24+ letters) | – | made by him; the SAME value as `FALCON_HR_SECRET` in HR's Vercel |
 | `FALCON_FIRST_ADMIN` | his WhatsApp mobile | – | makes him the first System Admin – only while FALCON has none |
 | `CRON_SECRET` | a long random value | – | made by him; Vercel's timer sends it by itself |
