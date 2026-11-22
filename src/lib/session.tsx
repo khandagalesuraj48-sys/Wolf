@@ -56,7 +56,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const load = useCallback(async (s: Session | null) => {
     setSession(s);
     if (!s) { setMe(null); setGrants([]); setStatus('signedout'); return; }
-    const p = await one<Person>(db().from('people').select('*').eq('auth_user_id', s.user.id).limit(1));
+    let p = await one<Person>(db().from('people').select('*').eq('auth_user_id', s.user.id).limit(1));
+    if (!p && s.user.phone) {
+      // (23-11-2026) signed in, not in FALCON yet: an active HR employee is known by his mobile; the first System Admin is made
+      const w = await api<{ person: string | null }>('/api/welcome', {}).catch(() => ({ person: null }));
+      if (w.person) p = await one<Person>(db().from('people').select('*').eq('auth_user_id', s.user.id).limit(1));
+    }
     if (!p) {
       const st = await call<{ state: string; reason: string | null; until: string | null; name: string } | null>('my_standing');
       if (st) { setMe({ full_name: st.name, state: st.state, state_reason: st.reason, temporary_until: st.until } as Person); setStatus('stopped'); return; }

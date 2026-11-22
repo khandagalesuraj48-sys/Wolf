@@ -16,7 +16,7 @@ const Ops = { Dashboard: page(ops, 'Dashboard'), Consumption: page(ops, 'Consump
   Analytics: page(ops, 'Analytics'), Scorecard: page(ops, 'Scorecard'), Audit: page(ops, 'Audit') };
 const Mst = { Sites: page(mst, 'Sites'), Messes: page(mst, 'Messes'), WorkOrders: page(mst, 'WorkOrders') };
 const Bil = { Billing: page(bil, 'Billing'), Reconciliation: page(bil, 'Reconciliation'), Approvals: page(bil, 'Approvals') };
-const Ppl = { Registrations: page(ppl, 'Registrations'), Guests: page(ppl, 'Guests'), PeopleRoles: page(ppl, 'PeopleRoles'), Settings: page(ppl, 'Settings') };
+const Ppl = { HrPeople: page(ppl, 'HrPeople'), Registrations: page(ppl, 'Registrations'), Guests: page(ppl, 'Guests'), PeopleRoles: page(ppl, 'PeopleRoles'), Settings: page(ppl, 'Settings') };
 import { Body, Denied, Failed, Loading, Screen } from './ui/kit';
 
 // Who may open what: the screens follow the roles (the database checks again on every read and action).
@@ -143,6 +143,7 @@ export function App() {
           <Route path="/admin/analytics" element={<Need roles={OFFICE}><Ops.Analytics /></Need>} />
           <Route path="/admin/scorecard" element={<Need roles={OFFICE}><Ops.Scorecard /></Need>} />
           <Route path="/admin/registrations" element={<Need roles={OFFICE}><Ppl.Registrations /></Need>} />
+          <Route path="/admin/hr" element={<Need roles={OFFICE}><Ppl.HrPeople /></Need>} />
           <Route path="/admin/guests" element={<Need roles={OFFICE}><Ppl.Guests /></Need>} />
           <Route path="/admin/people" element={<Need roles={OFFICE}><Ppl.PeopleRoles /></Need>} />
           <Route path="/admin/settings" element={<Need roles={OFFICE}><Ppl.Settings /></Need>} />

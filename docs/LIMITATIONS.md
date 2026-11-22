@@ -2,11 +2,11 @@
 
 ## Waiting for his decision (docs/DECISIONS.md → "Not decided yet")
 
-1. **The LION one sign-in** works only after the Portal has the module `falcon` (a change in `rcl-portal`) and `PORTAL_URL` is
-   set. Until then everybody uses FALCON's own WhatsApp code sign-in, and the first System Admin can only be made by the Portal's
-   Super Admin – so **the Portal's module is needed before FALCON can be set up**.
-2. **HR look-up** is not connected (a change in `rcl-hr`): every RCL ID answers "not checked", the person registers as new and
-   waits for the Site Admin; "present today" is not counted from HR.
+1. **FALCON is separate from the ERP for now** (his decision of 23-11-2026): the LION one sign-in stays off (no `PORTAL_URL`)
+   and everybody uses FALCON's own WhatsApp code sign-in. The first System Admin is the mobile set in `FALCON_FIRST_ADMIN`.
+2. **HR's list** comes only after `rcl-hr`'s pull request is merged, the secrets are set and the database update is run; until the
+   first copy every RCL ID answers "not checked" (the person registers and waits for the Site Admin). A new HR site is made with
+   its code as its name until the System Admin names it. "Present today" is not counted from HR's attendance yet.
 3. **WhatsApp code** needs FALCON's own `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` and the approved template `otp`; without
    them no code is sent (the screen says so).
 4. **Maps:** no Google Maps key – the road is drawn from each section's km (circles, sections, the van's last place on the drawn

@@ -3,7 +3,8 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import { verifyTicket } from './ticket.js';
 import { verifyHook } from './webhook.js';
 import { codePayload, toNumber, sendCode } from './whatsapp.js';
-import { hrLookup } from './hr.js';
+import { hrList, hrLookup } from './hr.js';
+import { firstAdmin } from '../welcome.js';
 
 const PORTAL = 'https://portal.test';
 const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
@@ -74,18 +75,51 @@ describe('the WhatsApp code', () => {
   });
 });
 
-describe('the HR look-up', () => {
-  beforeEach(() => { delete process.env.HR_LOOKUP_URL; delete process.env.HR_LOOKUP_SECRET; });
-  it('says "not_checked" while HR is not connected – nothing is made up', async () => {
-    expect(await hrLookup('TST-1', '+919800000000', async () => { throw new Error('must not be called'); })).toEqual({ result: 'not_checked' });
+describe('the HR look-up (FALCON\'s kept copy)', () => {
+  it('says "not_checked" when the database does not answer – nothing is made up', async () => {
+    expect(await hrLookup('TST-1', '+919800000000', async () => { throw new Error('down'); })).toEqual({ result: 'not_checked' });
   });
-  it('keeps only what FALCON needs from HR', async () => {
-    process.env.HR_LOOKUP_URL = 'https://hr.test/lookup'; process.env.HR_LOOKUP_SECRET = 's';
-    const r = await hrLookup('TST-1', '+919800000000', async () => ({ ok: true, json: async () => ({ result: 'found', name: 'A Name', designation: 'Engineer', ref: 'e1', mobile_matches: true, bank: 'never' }) }));
-    expect(r).toEqual({ result: 'found', name: 'A Name', designation: 'Engineer', ref: 'e1', mobile_matches: true });
+  it('asks the copy with the RCL ID in capitals and the proven mobile', async () => {
+    let asked;
+    const r = await hrLookup('tst-1', '+919800000000', async (fn, args) => { asked = [fn, args]; return { result: 'found', name: 'A Name', designation: 'Engineer', ref: 'e1', mobile: '+919800000000', mobile_matches: true, bank: 'never' }; });
+    expect(asked).toEqual(['server_hr_find', { p_company_code: 'RCL', p_rcl_id: 'TST-1', p_mobile: '+919800000000' }]);
+    expect(r).toEqual({ result: 'found', name: 'A Name', designation: 'Engineer', ref: 'e1', mobile: '+919800000000', mobile_matches: true });
   });
-  it('says "not_checked" when HR does not answer', async () => {
-    process.env.HR_LOOKUP_URL = 'https://hr.test/lookup'; process.env.HR_LOOKUP_SECRET = 's';
-    expect(await hrLookup('TST-1', null, async () => { throw new Error('down'); })).toEqual({ result: 'not_checked' });
+  it('gives nothing more than the answer for "not found"', async () => {
+    expect(await hrLookup('TST-2', null, async () => ({ result: 'not_found', name: 'x' }))).toEqual({ result: 'not_found' });
+  });
+});
+
+describe('HR\'s list (hrList)', () => {
+  beforeEach(() => { delete process.env.HR_EMPLOYEES_URL; delete process.env.HR_FALCON_SECRET; });
+  it('is refused – and says why – while HR is not connected', async () => {
+    await expect(hrList(async () => { throw new Error('must not be called'); })).rejects.toThrow('HR_EMPLOYEES_URL, HR_FALCON_SECRET missing in Vercel');
+  });
+  it('reads every page with the secret and keeps only the agreed fields', async () => {
+    process.env.HR_EMPLOYEES_URL = 'https://hr.test/api/falcon-employees'; process.env.HR_FALCON_SECRET = 's'.repeat(30);
+    const asked = [];
+    const pages = [{ employees: [{ id: 'e1', code: 'RCL-1', name: 'A', designation: 'Driver', category: 'driver', site: 'VTR', mobile: '9800000044', status: 'active', left: '', dob: 'never', bank: 'never' }], next: 1 },
+      { employees: [{ id: 'e2', code: 'RCL-2', name: 'B', site: 'B18', status: 'left', left: '2026-10-31' }], next: null }];
+    const list = await hrList(async (url, opt) => { asked.push([url, opt.headers.Authorization, JSON.parse(opt.body)]); return { ok: true, status: 200, json: async () => pages[asked.length - 1] }; });
+    expect(asked.map((a) => a[2])).toEqual([{ offset: 0, limit: 1000 }, { offset: 1, limit: 1000 }]);
+    expect(asked[0][1]).toBe('Bearer ' + 's'.repeat(30));
+    expect(list).toEqual([
+      { id: 'e1', code: 'RCL-1', name: 'A', designation: 'Driver', category: 'driver', site: 'VTR', mobile: '9800000044', status: 'active', left: undefined },
+      { id: 'e2', code: 'RCL-2', name: 'B', designation: undefined, category: undefined, site: 'B18', mobile: undefined, status: 'left', left: '2026-10-31' }]);
+  });
+  it('says plainly when HR refuses FALCON', async () => {
+    process.env.HR_EMPLOYEES_URL = 'https://hr.test/api/falcon-employees'; process.env.HR_FALCON_SECRET = 'x';
+    await expect(hrList(async () => ({ ok: false, status: 401, json: async () => ({}) }))).rejects.toThrow('HR refused FALCON');
+  });
+});
+
+describe('the first System Admin (FALCON_FIRST_ADMIN)', () => {
+  it('takes an Indian mobile in any common way, and nothing else', () => {
+    expect(firstAdmin('9800000077')).toBe('+919800000077');
+    expect(firstAdmin('+91 98000 00077')).toBe('+919800000077');
+    expect(firstAdmin('09800000077')).toBe('+919800000077');
+    expect(firstAdmin('')).toBe(null);
+    expect(firstAdmin('12345')).toBe(null);
+    expect(firstAdmin('+1 415 555 0100')).toBe(null);
   });
 });

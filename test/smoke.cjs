@@ -56,7 +56,7 @@ const ROUTES = ['/', '/start', '/start/rcl-id', '/start/new', '/guest/new', '/ap
   '/owner/batches/' + ID(97) + '/dispatch', '/owner/live', '/owner/menu', '/owner/guests', '/owner/closing', '/owner/complaints', '/owner/billing', '/owner/follow-up',
   '/driver', '/driver/assignments/' + ID(97), '/driver/vehicle', '/driver/trip', '/driver/route/' + ID(20), '/driver/stops/' + ID(20), '/driver/hand/' + ID(99) + '/' + ID(1), '/driver/summary/' + ID(97),
   '/admin', '/admin/consumption', '/admin/complaints', '/admin/sites', '/admin/mess', '/admin/work-orders', '/admin/billing', '/admin/reconciliation', '/admin/approvals',
-  '/admin/reports', '/admin/analytics', '/admin/scorecard', '/admin/registrations', '/admin/guests', '/admin/people', '/admin/settings', '/admin/audit', '/m/' + ID(30) + '?c=2'];
+  '/admin/reports', '/admin/analytics', '/admin/scorecard', '/admin/registrations', '/admin/hr', '/admin/guests', '/admin/people', '/admin/settings', '/admin/audit', '/m/' + ID(30) + '?c=2'];
 
 (async () => {
   await new Promise((ok) => server.listen(4179, ok));

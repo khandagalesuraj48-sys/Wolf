@@ -56,12 +56,29 @@ Every decision here is the owner's. The newest wins. Nothing is built that is no
   sagle houn jail"): the whole application on one branch, one pull request, and one master SQL (`supabase/FALCON_MASTER.sql`,
   tested on a clean database) with the seed apart.
 
+* **The database is in** (23-11-2026): he ran `FALCON_MASTER.sql` and the seed on FALCON's own new Supabase project; the check
+  of tables without Row Level Security answered 0.
+* **FALCON stays fully separate at the start** ("surwatila falcon he purn seprate asel erp madhe lagech nahi hodaych … mi sangel
+  tewa jodu code banla asel tr thik ahe"): it is not joined to LION / the Portal / HR now – no `PORTAL_URL`, no HR look-up. The
+  code for joining stays as it is and is switched on only when he says. Everybody signs in to FALCON with its own WhatsApp code.
+
+* **FALCON's admin stays in FALCON, not in the Portal** ("salet adhi FALCON ch admin page banaw portal madhe he nko gheyla"):
+  roles are given in FALCON's own web (People and roles).
+* **The first System Admin:** the mobile he sets in Vercel (`FALCON_FIRST_ADMIN`) becomes System Admin at its first WhatsApp code –
+  only while the company has none (he set it the same night: "admin number add krun redeploy keley").
+* **HR's employees in FALCON** ("HR cha data base FALCON la connect kr … all RCL che je astil … new site … new employee HR madhe aala
+  tri te yat yeyla hawa" – and his yes to the plan): HR gives FALCON's server only RCL ID, name, designation, category, site, mobile,
+  status, left day (`rcl-hr` api/falcon-employees, its own secret); FALCON keeps that list and copies it every hour; HR stays the
+  master and is never changed from FALCON. An active HR employee is known by his mobile after a WhatsApp code (no form, no Site
+  Admin check); a new HR site becomes a FALCON site; who left in HR is stopped; people not in HR register as before.
+* **The phone app is Flutter** ("APK … flutter ni banawleli asawi proper"; repository `khandagalesuraj48-sys/FALCONAPK`): the app's
+  own screens, not the web shown inside; package `si.sketchline.falcon`.
+
 ## Not decided yet – asked before that part is built
-1. **Portal side of the one sign-in:** adding the module `falcon` in the Portal (Super Admin → Modules) and what its ticket
+1. **Portal side of the one sign-in (later – when he joins it):** adding the module `falcon` in the Portal (Super Admin → Modules) and what its ticket
    carries; where FALCON's finer roles (Mess Owner … System Admin) are given – in the Portal's Users & Access, as HR's are, or in
    FALCON. A change in `rcl-portal` is its own piece of work.
-2. **HR look-up:** the RCL ID check and the "present today" count need a small read-only answer from HR's server (`rcl-hr`) –
-   name, designation, category, site, and whether the mobile matches; never KYC, bank or pay. A change in `rcl-hr`.
+2. ~~HR look-up~~ – decided 23-11-2026 (above). Still open: a "present today" count from HR's attendance.
 3. **WhatsApp code for FALCON's own sign-in:** the same Meta number and the approved template `otp`, its token kept in FALCON's
    Vercel too.
 4. **Maps:** Google Maps (his choice for LION) – FALCON's key.
