@@ -11,7 +11,7 @@ run 30 -d postgres -c "create database $db"
 trap 'run 30 -d postgres -c "drop database if exists $db" >/dev/null' EXIT
 run 60 -d "$db" -f "$here/00_supabase_stub.sql" >/dev/null
 for pass in 1 2; do
-  for f in "$here"/../migrations/*.sql; do run 120 -d "$db" -f "$f" >/dev/null; done
+  for f in "$here"/../migrations/*.sql; do PGOPTIONS="-c client_min_messages=warning" run 120 -d "$db" -f "$f" >/dev/null; done
 done
 echo "migrations: ran twice, no error"
 for t in "$here"/0*.test.sql; do

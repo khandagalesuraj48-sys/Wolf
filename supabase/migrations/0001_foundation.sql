@@ -11,7 +11,8 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  create type public.person_kind as enum ('employee', 'guest');
+  create type public.person_kind as enum ('employee', 'guest', 'contractor_staff');   -- contractor_staff: a mess owner, operator or
+                                                                                    -- driver who is not on RCL's roll
 exception when duplicate_object then null; end $$;
 
 -- The states of docs/PERMISSIONS.md → Registration states.
