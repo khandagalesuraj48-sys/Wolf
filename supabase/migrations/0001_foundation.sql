@@ -2,7 +2,14 @@
 -- their phones; dated settings; the audit log; the helpers every rule of Row Level Security uses.
 -- Safe to run again: every object is made only when it is not there.
 
-create extension if not exists btree_gist;
+-- Supabase keeps extensions in the schema "extensions" (pgcrypto is already there); FALCON uses the same place.
+create schema if not exists extensions;
+create extension if not exists btree_gist with schema extensions;
+create extension if not exists pgcrypto with schema extensions;
+
+-- India: a day and its clock times are the site's (meal windows, today's orders).
+create or replace function public.local_now() returns timestamp language sql stable as $$ select now() at time zone 'Asia/Kolkata' $$;
+create or replace function public.local_today() returns date language sql stable as $$ select (now() at time zone 'Asia/Kolkata')::date $$;
 
 -- ── kinds ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 do $$ begin
@@ -122,7 +129,7 @@ create table if not exists public.role_grants (
   company_id  uuid not null,
   site_id     uuid,
   role        public.app_role not null,
-  valid_from  date not null default current_date,
+  valid_from  date not null default public.local_today(),
   valid_to    date,
   granted_by  uuid references public.people(id),
   granted_at  timestamptz not null default now(),
@@ -206,7 +213,7 @@ create or replace function public.me() returns uuid
 language sql stable security definer set search_path = '' as $$
   select p.id from public.people p
   where p.auth_user_id = auth.uid() and p.state not in ('rejected', 'suspended')
-    and (p.state <> 'temporary' or p.temporary_until >= current_date)
+    and (p.state <> 'temporary' or p.temporary_until >= public.local_today())
 $$;
 
 create or replace function public.my_company() returns uuid
@@ -220,7 +227,7 @@ language sql stable security definer set search_path = '' as $$
   select exists (
     select 1 from public.role_grants g
     where g.person_id = public.me() and g.revoked_at is null and g.role = any (roles)
-      and current_date >= g.valid_from and (g.valid_to is null or current_date <= g.valid_to)
+      and public.local_today() >= g.valid_from and (g.valid_to is null or public.local_today() <= g.valid_to)
       and (site is null or g.site_id is null or g.site_id = site))
 $$;
 

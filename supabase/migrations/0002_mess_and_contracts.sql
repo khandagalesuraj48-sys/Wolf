@@ -224,7 +224,7 @@ returns boolean language sql stable security definer set search_path = '' as $$
   select exists (
     select 1 from public.role_grants g
     where g.person_id = public.me() and g.revoked_at is null and g.mess_id = m and g.role = any (roles)
-      and current_date >= g.valid_from and (g.valid_to is null or current_date <= g.valid_to))
+      and public.local_today() >= g.valid_from and (g.valid_to is null or public.local_today() <= g.valid_to))
 $$;
 
 -- Is the person signed in now the owner of a mess run by this contractor?
