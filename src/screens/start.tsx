@@ -35,7 +35,7 @@ export function Who() {
   return (
     <Screen>
       <div style={{ background: 'var(--navy)', color: '#fff', padding: '40px 24px 34px', borderRadius: '0 0 32px 32px' }}>
-        <div className="tile navy s56" style={{ background: '#172A4C' }}><Icon name="utensils" size={28} /></div>
+        <img src="/brand/logo-96.png" width={64} height={64} alt="FALCON" style={{ display: 'block' }} />
         <p style={{ margin: '18px 0 0', fontSize: 30, fontWeight: 700, letterSpacing: '-.025em', lineHeight: 1.1 }}>Welcome to<br />FALCON</p>
         <p style={{ margin: '10px 0 0', fontSize: 15, color: '#C9D2E0' }}>Food &amp; Site Operations</p>
       </div>

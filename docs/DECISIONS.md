@@ -75,6 +75,10 @@ Every decision here is the owner's. The newest wins. Nothing is built that is no
   employee too", everybody in HR's list counts unless he LEFT; HR's own status is only shown.)
 * **The phone app is Flutter** ("APK … flutter ni banawleli asawi proper"; repository `khandagalesuraj48-sys/FALCONAPK`): the app's
   own screens, not the web shown inside; package `si.sketchline.falcon`.
+* **The logo is B** (23-11-2026 – asked "REAL WATAWA LOGO PREMIUM FEEL DE DARK MADEH NKO … APLE APP RELATED"; two options shown as
+  pictures; his answer "B OK AAHE"): a real-looking peregrine falcon on a gold-rimmed plate, a fork and a knife crossed behind, on light
+  ivory. Used for the web's browser tab and home-screen icon, the first screen, the office sidebar, and the Android app's icon and
+  opening screen.
 
 ## Not decided yet – asked before that part is built
 1. **Portal side of the one sign-in (later – when he joins it):** adding the module `falcon` in the Portal (Super Admin → Modules) and what its ticket
@@ -84,5 +88,5 @@ Every decision here is the owner's. The newest wins. Nothing is built that is no
 3. **WhatsApp code for FALCON's own sign-in:** the same Meta number and the approved template `otp`, its token kept in FALCON's
    Vercel too.
 4. **Maps:** Google Maps (his choice for LION) – FALCON's key.
-5. **The FALCON logo:** not given yet (`docs/DESIGN_INVENTORY.md` → Missing).
+5. ~~**The FALCON logo**~~ – decided 23-11-2026: B (above).
 6. **"Posted in the ERP":** which ledger a paid bill goes to.

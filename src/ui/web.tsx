@@ -38,7 +38,7 @@ export function Web({ title, actions, children, roles }: { title: ReactNode; act
   return (
     <div className="web f" style={{ minHeight: '100dvh' }}>
       <nav className={'side' + (open ? ' open' : '')} aria-label="FALCON">
-        <div className="brand"><div className="tile s40 navy" style={{ background: '#172A4C' }}><Icon name="utensils" /></div><div><b>FALCON</b><small>Food &amp; Site Operations</small></div></div>
+        <div className="brand"><img src="/brand/logo-96.png" width={40} height={40} alt="" style={{ display: 'block', flex: 'none' }} /><div><b>FALCON</b><small>Food &amp; Site Operations</small></div></div>
         {NAV.map((g) => {
           const items = g.items.filter((i) => s.has(i.roles));
           if (!items.length) return null;
