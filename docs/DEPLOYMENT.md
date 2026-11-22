@@ -40,7 +40,9 @@ piece of work.
 | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID` | yes | no | Meta → WhatsApp → the same number as the ERP's (decision 3) |
 | `WHATSAPP_OTP_TEMPLATE`, `WHATSAPP_OTP_LANG` | `otp`, `en` | – | the approved authentication template (body code + copy-code button) |
 | `PORTAL_URL` | the Portal's address | – | only when the Portal's module `falcon` is there (decision 1) |
-| `HR_LOOKUP_URL`, `HR_LOOKUP_SECRET` | – | – | only when HR's look-up is there (decision 2); until then "not checked" |
+| `HR_EMPLOYEES_URL` | `https://oneclicksolution.online/hr/api/falcon-employees` | – | HR's list for FALCON (an address, not a secret) |
+| `HR_FALCON_SECRET` | a long random word (24+ letters) | – | made by him; the SAME value as `FALCON_HR_SECRET` in HR's Vercel |
+| `FALCON_FIRST_ADMIN` | his WhatsApp mobile | – | makes him the first System Admin – only while FALCON has none |
 | `CRON_SECRET` | a long random value | – | made by him; Vercel's timer sends it by itself |
 | `VITE_GOOGLE_MAPS_KEY` | – | – | not used yet (decision 4) |
 
@@ -68,11 +70,15 @@ piece of work.
 * The ticket (ES256, the Portal's own key, like every module's): `aud: "falcon"`, `sub` (his user ID), `name`, `jti`, `exp`
   (a few minutes), `iss` (the Portal's address), optionally `site` (the site code) and `super: true` for the Super Admin.
 
-## 5 · What HR's look-up needs (decision 2 – a change in `rcl-hr`, not made here)
+## 5 · HR's employees (decision of 23-11-2026)
 
-* `POST HR_LOOKUP_URL` with `Authorization: Bearer HR_LOOKUP_SECRET` and `{ "rcl_id": "VTR-0457", "mobile": "+91…" | null }`.
-* Answer: `{ result: "found" | "not_found" | "maybe", name, designation, department, category, site, ref, mobile, mobile_matches }`
-  – never KYC, bank or pay. HR's mobile stays on FALCON's server (the code is sent to it); the browser sees it masked.
+* HR (`rcl-hr`, its pull request "FALCON: every employee of every site") gives FALCON's server ONLY: RCL ID, name, designation,
+  category, site, mobile, status, the day he left – never birth date, e-mail, KYC, bank, pay, photo or face. HR's Vercel:
+  `FALCON_HR_SECRET`; FALCON's Vercel: `HR_EMPLOYEES_URL` and `HR_FALCON_SECRET` (the same word).
+* FALCON copies it every hour (`/api/hr-sync`, Vercel's timer) and when the System Admin presses "Bring from HR now" (web →
+  Employees from HR). The database update `supabase/updates/2026-11-23_hr_people.sql` (part 0013) must be run once first.
+* After a WhatsApp code an ACTIVE HR employee is known by his mobile at once; a new HR site becomes a FALCON site; who left in HR
+  is stopped in FALCON (and let in again if HR makes him active).
 
 ## Going back
 

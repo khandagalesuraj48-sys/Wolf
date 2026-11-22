@@ -24,6 +24,7 @@ export const NAV: { grp: string; items: { to: string; icon: string; label: strin
     { to: '/admin/analytics', icon: 'chart-line', label: 'Analytics', roles: ['system_admin', 'management', 'site_admin', 'accounts'] }] },
   { grp: 'People and control', items: [
     { to: '/admin/registrations', icon: 'user-plus', label: 'Registrations', roles: ['system_admin', 'site_admin', 'management'] },
+    { to: '/admin/hr', icon: 'id-card', label: 'Employees from HR', roles: ['system_admin', 'site_admin', 'management'] },
     { to: '/admin/guests', icon: 'users', label: 'Guests', roles: ['system_admin', 'site_admin', 'management', 'accounts'] },
     { to: '/admin/people', icon: 'user-check', label: 'People and roles', roles: ['system_admin', 'site_admin'] },
     { to: '/admin/settings', icon: 'settings', label: 'Settings', roles: ['system_admin', 'accounts'] },

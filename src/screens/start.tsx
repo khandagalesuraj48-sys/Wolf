@@ -167,7 +167,13 @@ export function Code() {
     }
     const { data } = await supabase.auth.getSession();
     const uid = data.session!.user.id;
-    if (f.mode === 'back') { await s.refresh(); nav('/'); return; }
+    // who is this? – already in FALCON, made by the office, an active HR employee (by his mobile), or the first System Admin
+    const w = await api<{ person: string | null }>('/api/welcome', {}).catch(() => ({ person: null }));
+    if (w.person) { await s.refresh(); nav('/'); return; }
+    if (f.mode === 'back') {
+      await supabase.auth.signOut();
+      throw new Error('This mobile is not in FALCON or in HR yet – go back and register.');
+    }
     const exists = await one(db().from('people').select('id').eq('auth_user_id', uid).limit(1));
     if (!exists) {
       let photo: string | undefined;
@@ -420,8 +426,9 @@ export function Back() {
   const send = () => a.run(async () => {
     if (!tenOk(mobile)) throw new Error('Type your 10-digit WhatsApp mobile.');
     const phone = phoneE164(mobile);
-    const { error } = await supabase!.auth.signInWithOtp({ phone, options: { shouldCreateUser: false } });
-    if (error) throw new Error(error.status === 429 ? 'Wait a minute before asking a new code.' : 'This number is not registered in FALCON – register first.');
+    // (23-11-2026) also a first sign-in: an RCL employee who is in HR is known by his mobile; who is not, registers
+    const { error } = await supabase!.auth.signInWithOtp({ phone, options: { shouldCreateUser: true } });
+    if (error) throw new Error(error.status === 429 ? 'Wait a minute before asking a new code.' : 'The code could not be sent – try again.');
     setFlow({ mode: 'back', phone });
     nav('/start/code');
   });
@@ -433,7 +440,7 @@ export function Back() {
         <Input big icon="phone" value={mobile} onChange={setMobile} placeholder="10 digits" inputMode="tel" maxLength={14} autoFocus ariaLabel="WhatsApp mobile" />
         <ErrorLine error={a.error} />
         <Btn style={{ background: '#128C4A' }} onClick={send} busy={a.busy}><Icon name="message-circle" />Send code on WhatsApp</Btn>
-        <div className="row xs" style={{ gap: 6 }}><Icon name="info" size={14} /><span className="sp">Working for RCL with a LION sign-in? Open FALCON from LION – no code is needed.</span></div>
+        <div className="row xs" style={{ gap: 6 }}><Icon name="info" size={14} /><span className="sp">Working for RCL? Your mobile in HR is enough – the code comes on WhatsApp.</span></div>
       </Body>
     </Screen>
   );

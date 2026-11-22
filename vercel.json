@@ -47,11 +47,15 @@
     {
       "path": "/api/daily",
       "schedule": "30 0 * * *"
+    },
+    {
+      "path": "/api/hr-sync",
+      "schedule": "15 * * * *"
     }
   ],
   "functions": {
     "api/*.js": {
-      "maxDuration": 15
+      "maxDuration": 30
     }
   }
 }

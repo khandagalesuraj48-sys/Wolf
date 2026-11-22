@@ -289,3 +289,44 @@ export function Settings() {
     </Web>
   );
 }
+
+// ── (23-11-2026) Employees from HR – every site; copied every hour; the System Admin may bring it now ──
+interface HrRow { rcl_id: string | null; full_name: string; designation: string | null; category: string | null; site_code: string | null; mobile: string | null; status: string; left_on: string | null; gone: boolean; in_falcon: string | null }
+interface HrStatus { last: { at: string; ok: boolean; how: string; total: number; added: number; changed: number; gone: number; stopped: number; released: number; new_sites: string[]; message: string | null } | null; last_ok: string | null;
+  sites: { site: string | null; active: number; left: number; other: number; in_falcon: number }[] }
+export function HrPeople() {
+  const s = useSession();
+  const [site, setSite] = useState('');
+  const [find, setFind] = useState('');
+  const st = useLoad(() => call<HrStatus | null>('office_hr_status'), []);
+  const list = useLoad(() => call<HrRow[]>('office_hr_people', { p_site: site || null, p_find: find.trim() || null, p_limit: 500 }), [site, find]);
+  const a = useAct();
+  const now = () => a.run(async () => { await api('/api/hr-sync', {}); st.reload(); list.reload(); });
+  const l = st.data?.last;
+  const sites = st.data?.sites || [];
+  const tone = (x: HrRow) => (x.gone || x.status === 'left' ? 'red' : x.status === 'active' ? 'leaf' : 'amber');
+  return (
+    <Web title="Employees from HR" roles={['system_admin', 'site_admin', 'management']}
+      actions={<><select className="wbtn" value={site} onChange={(e) => setSite(e.target.value)} aria-label="Site"><option value="">All sites</option>{sites.map((x) => <option key={x.site || '-'} value={x.site || ''}>{x.site || '(no site)'}</option>)}</select>
+        <Input value={find} onChange={setFind} placeholder="Name or RCL ID" />
+        {s.has('system_admin') && <button className="wbtn pri" onClick={now} disabled={a.busy}><Icon name="refresh-cw" size={16} />Bring from HR now</button>}</>}>
+      <ErrorLine error={a.error} />
+      {st.error ? <Failed error={st.error} retry={st.reload} /> : <div className="kpis">
+        <Kpi label="In HR · active" value={numOf(sites.reduce((t, x) => t + x.active, 0))} note={sites.length + ' sites'} tone="leaf" />
+        <Kpi label="Already in FALCON" value={numOf(sites.reduce((t, x) => t + x.in_falcon, 0))} note="they sign in with their mobile" />
+        <Kpi label="Left in HR" value={numOf(sites.reduce((t, x) => t + x.left, 0))} note="stopped in FALCON" tone="red" />
+        <Kpi label="Last copy" value={st.data?.last_ok ? day(st.data.last_ok) + ' ' + time(st.data.last_ok) : 'not yet'} tone={l && !l.ok ? 'red' : 'muted'}
+          note={l ? (l.ok ? '+' + l.added + ' new · ' + l.changed + ' changed' + (l.new_sites.length ? ' · new sites ' + l.new_sites.join(', ') : '') : 'last try failed: ' + (l.message || '')) : 'every hour, by itself'} />
+      </div>}
+      <div className="wcard" style={{ padding: '8px 8px 0' }}>
+        {list.loading && !list.data ? <Loading /> : list.error ? <Failed error={list.error} retry={list.reload} /> :
+          <Tbl head={['RCL ID', 'Name', 'Designation', 'Site', 'Mobile', 'In HR', 'In FALCON']} empty={st.data?.last_ok ? 'Nobody matches' : 'HR\'s list has not come yet – it comes every hour once HR is connected (docs/DEPLOYMENT.md)'}
+            rows={(list.data || []).map((x) => [<b>{x.rcl_id || '–'}</b>, x.full_name, x.designation || x.category || '–', x.site_code || '–', x.mobile || '–',
+              <span className={'chip ' + tone(x)} style={{ height: 24 }}>{x.gone ? 'not in HR now' : x.status === 'left' ? 'left ' + day(x.left_on) : x.status}</span>,
+              x.in_falcon ? <span className={'chip ' + (x.in_falcon === 'suspended' ? 'red' : 'leaf')} style={{ height: 24 }}>{x.in_falcon}</span> : <span className="xs">signs in with his mobile</span>])} />}
+      </div>
+      <div className="row xs" style={{ gap: 8 }}><Icon name="shield-check" size={14} /><span className="sp">HR stays the master – nothing here changes HR. Only RCL ID, name, designation, category, site, mobile and status come from HR; never birth date, e-mail, KYC, bank, pay or photo. A new site of HR comes by itself; who left in HR cannot order meals.</span></div>
+    </Web>
+  );
+}
+const numOf = (n: number) => n.toLocaleString('en-IN');

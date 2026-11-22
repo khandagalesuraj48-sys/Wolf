@@ -2,7 +2,7 @@
 
 ## What there is
 
-* `supabase/migrations/0001…0012_*.sql` – the source, part by part (each safe to run again):
+* `supabase/migrations/0001…0013_*.sql` – the source, part by part (each safe to run again):
 
 | Part | What it makes |
 |---|---|
@@ -18,11 +18,20 @@
 | 0010 realtime | the live tables |
 | 0011 app helpers | the screens' read functions (my van, the kitchen's list, the follow-up calls, the office's numbers …) |
 | 0012 admin | a dated setting changed by the System Admin (`set_setting`) |
+| 0013 HR's people | HR's list kept (RCL ID, name, designation, category, site, mobile, status – nothing else), copied every hour; a new HR site made; who left stopped; an HR employee known by his mobile after a WhatsApp code; the first System Admin (`FALCON_FIRST_ADMIN`) |
 
 * `supabase/FALCON_MASTER.sql` – **the one script to run**, built from the parts by `supabase/build_master.sh` (never edited by
   hand), inside one transaction: all or nothing.
 * `supabase/seed/seed.sql` – apart from the master: the company RCL and the items of a bill (the four meals, guest meal, parcel
   packing, water 1 L). No person, rate, tax rule, site or money.
+
+* `supabase/updates/<date>_*.sql` – a later part alone, for a database that already has the master (one transaction).
+
+## Updates after the first run
+
+| Date | File | What |
+|---|---|---|
+| 23-11-2026 | `supabase/updates/2026-11-23_hr_people.sql` | HR's employees in FALCON and the first System Admin (part 0013). Tested on a copy with the master of 23-11-2026 and the seed: run twice, then every test (162 checks) |
 
 ## Running it (his step)
 
