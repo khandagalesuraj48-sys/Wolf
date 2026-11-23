@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { api, call, db, one, rows } from './db';
+import { doorCode } from './door';
 
 export type Role = 'employee' | 'guest' | 'mess_owner' | 'mess_operator' | 'mess_supervisor' | 'driver' | 'site_admin' | 'accounts' | 'management' | 'system_admin';
 
@@ -59,7 +60,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     let p = await one<Person>(db().from('people').select('*').eq('auth_user_id', s.user.id).limit(1));
     if (!p && s.user.phone) {
       // (23-11-2026) signed in, not in FALCON yet: an active HR employee is known by his mobile; the first System Admin is made
-      const w = await api<{ person: string | null }>('/api/welcome', {}).catch(() => ({ person: null }));
+      const w = await api<{ person: string | null }>('/api/welcome', { company: doorCode() }).catch(() => ({ person: null }));
       if (w.person) p = await one<Person>(db().from('people').select('*').eq('auth_user_id', s.user.id).limit(1));
     }
     if (!p) {

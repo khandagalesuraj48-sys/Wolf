@@ -61,8 +61,8 @@ piece of work.
   contractors (the mess, its meal times, its counter QR codes to print; the contractor, his bank details, his papers) → Work
   orders and rates (Accounts: the work order, each rate from a date, penalties) → Settings (Accounts: the GST and TDS rules with
   the CA's check) → People and roles (who is Mess Owner, Operator, Supervisor, Driver, Site Admin, Accounts, Management; the vans).
-* People register themselves (WhatsApp code; RCL ID looked up in HR when it is connected); the Site Admin verifies them in
-  Registrations.
+* People register themselves (the company code, then the employee code looked up in HR, then the WhatsApp code); the Site
+  Admin verifies those not in HR in Registrations.
 
 ## 4 · What the Portal's module needs (decision 1 – a change in `rcl-portal`, not made here)
 
@@ -79,6 +79,20 @@ piece of work.
   Employees from HR). The database update `supabase/updates/2026-11-23_hr_people.sql` (part 0013) must be run once first.
 * After a WhatsApp code an ACTIVE HR employee is known by his mobile at once; a new HR site becomes a FALCON site; who left in HR
   is stopped in FALCON (and let in again if HR makes him active).
+
+## 6 · The company code first, the contractor's code, the limits (decision of 23-11-2026)
+
+1. **The database first:** run `supabase/updates/2026-11-23c_start_codes.sql` (part 0014) once – before merging the web update. Without
+   it the new first screen says "FALCON's database needs its update of 23-11-2026 first."
+2. **Supabase → Authentication → Rate Limits:** Supabase sends at most **30 SMS / codes an hour for the whole project** by itself (its
+   default) – too few when a site signs in at shift start. Raise "Rate limit for sending SMS messages" to what a busy hour needs
+   (e.g. a few hundred). Each code is one WhatsApp message (Meta's charge). FALCON's own limit per mobile stays: 1 code a minute,
+   5 an hour, 10 a day.
+3. **The company's code** is the code of the company in FALCON (`RCL` for Rachana, made by the seed). Tell the employees: open
+   FALCON → type `RCL` → their employee code → the WhatsApp code.
+4. **A mess contractor's code:** web → Mess and contractors → the contractor → "Sign-in code" (the System Admin): e.g. `SAIMESS`.
+   Then People and roles → the owner / operator (name + mobile) → give "Mess owner" / "Mess operator" at that contractor's mess. Only
+   those mobiles get a code with the contractor's code.
 
 ## Going back
 
