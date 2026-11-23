@@ -27,7 +27,8 @@ piece of work.
 ## 2 · The Vercel project
 
 1. vercel.com → **Add New → Project** → import `khandagalesuraj48-sys/Wolf`. Its own project – never the ERP's. The settings come
-   from `vercel.json` (build `npm run build`, output `dist`, the security headers, the daily timer).
+   from `vercel.json` (build `npm run build`, output `dist`, the security headers, the daily timer, and the server's region
+   **Mumbai `bom1`** – beside FALCON's Supabase, like every ERP project; 23-11-2026).
 2. **Settings → Environment Variables** (names in `.env.example`):
 
 | Name | Production | Preview | Where it comes from |
@@ -127,6 +128,17 @@ piece of work.
    section without its place AND metres is never found by a location – an order from there is taken as "outside every section".
 4. **What it changes:** a van order goes to the section where the person is, by itself; from outside every section it brings his
    location – the kitchen and the driver get it with Google's directions. Nobody sees a circle any more.
+
+## 10 · Connected and quicker (23-11-2026, his word: "falcon khup slow aahe ekmekana connect nahiye … work order detana choose mess ekl ki name nahi yet")
+
+Nothing to set and no SQL step – merging the web update and the FALCON app's is all.
+1. **New work order → Mess:** every mess in use (or coming) is listed with its site and its contractor. A mess with no contractor yet:
+   the System Admin / that site's Site Admin chooses him in the same form – he is set on the mess too (kept in its History). Accounts
+   (who may not change a mess) is told to ask the Site Admin. No mess / no contractor yet: the form says where to add it.
+2. **FALCON's server runs in Mumbai (`bom1`)** like the ERP's – before it ran in Washington (Vercel's default), every look-up of its
+   database (in Mumbai) went round the world: HR's Mess card, "Open FALCON" from HR, the sign-in, the WhatsApp code.
+3. **An order's page** reads only that order's confirmations (it read every confirmation the person may see – more every day).
+4. **Live screens:** many changes at once (a batch confirmed, the van's points) load the screen once, not once each.
 
 ## Going back
 

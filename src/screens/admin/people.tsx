@@ -9,7 +9,7 @@ import { day, initials, maskMobile, mealName, MEALS, num, time, today } from '..
 import { Icon } from '../../ui/Icon';
 import { ErrorLine, Failed, Input, Loading } from '../../ui/kit';
 import { csv, Kpi, SitePick, Tbl, Web } from '../../ui/web';
-import { inUse, type Dated } from '../../lib/dated';
+import { inUse, listed, type Dated } from '../../lib/dated';
 
 interface Reg {
   id: string; code: string; site_id: string | null; section_id: string | null; typed_rcl_id: string | null; hr_result: string; hr_name: string | null;
@@ -156,7 +156,7 @@ export function PeopleRoles() {
   const [find, setFind] = useState('');
   const people = useLoad(() => site ? rows<Person>(db().from('people').select('id,full_name,mobile,kind,state,rcl_id,work_role,may_group').eq('home_site_id', site).order('full_name').limit(1000)) : Promise.resolve([]), [site]);
   const grants = useLoad(() => rows<Grant>(db().from('role_grants').select('id,person_id,role,site_id,mess_id,valid_from,valid_to,revoked_at').is('revoked_at', null)), [site]);
-  const messes = useLoad(() => rows<{ id: string; name: string; site_id: string }>(db().from('messes').select('id,name,site_id')), []);
+  const messes = useLoad(() => rows<{ id: string; name: string; site_id: string } & Dated>(db().from('messes').select('id,name,site_id,active,valid_from,valid_to,removed_at')), []);
   const vans = useLoad(() => rows<{ id: string; reg_no: string; kind: string; capacity: number | null; site_id: string | null; active: boolean }>(db().from('vehicles').select('*').order('reg_no')), []);
   const [sel, setSel] = useState('');
   const shown = (people.data || []).filter((p) => !find || (p.full_name + ' ' + (p.mobile || '') + ' ' + (p.rcl_id || '')).toLowerCase().includes(find.toLowerCase()));
@@ -191,7 +191,7 @@ export function PeopleRoles() {
           </div>
           {sysadm && p.id !== s.me?.id && <><div className="hr" style={{ margin: '12px 0' }} /><h3>Give a role</h3><div className="col" style={{ gap: 8 }}>
             <select className="winp" value={g.role} onChange={(e) => setG({ ...g, role: e.target.value as Role })} aria-label="Role">{ROLES.map((r) => <option key={r.role} value={r.role}>{r.label}</option>)}</select>
-            {['mess_owner', 'mess_operator'].includes(g.role) ? <select className="winp" value={g.mess} onChange={(e) => setG({ ...g, mess: e.target.value })} aria-label="Mess"><option value="">Mess</option>{(messes.data || []).filter((m) => m.site_id === site).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
+            {['mess_owner', 'mess_operator'].includes(g.role) ? <select className="winp" value={g.mess} onChange={(e) => setG({ ...g, mess: e.target.value })} aria-label="Mess"><option value="">Mess</option>{(messes.data || []).filter((m) => m.site_id === site && listed(m)).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
               : <label className="row sm" style={{ gap: 8 }}><input type="checkbox" checked={g.every} onChange={(e) => setG({ ...g, every: e.target.checked })} />Every site (not only {siteCode(site)})</label>}
             <div className="row" style={{ gap: 8 }}><input className="winp" type="date" value={g.from} onChange={(e) => setG({ ...g, from: e.target.value })} aria-label="From" /><input className="winp" type="date" value={g.to} onChange={(e) => setG({ ...g, to: e.target.value })} aria-label="Till (empty: no end)" /></div>
             <button className="wbtn pri" onClick={give} disabled={a.busy || (['mess_owner', 'mess_operator'].includes(g.role) && !g.mess)}><Icon name="plus" size={16} />Give the role</button></div></>}
