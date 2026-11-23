@@ -1,6 +1,7 @@
 # FALCON – design inventory and screen map
 
-The approved designs (his word of 23-11-2026: "tu dilel mala design final aahet"; 8 more approved the same day: "ho banaw") are the 79 boards of the design canvas
+The approved designs (his word of 23-11-2026: "tu dilel mala design final aahet"; 8 more approved the same day: "ho banaw"; 8 more for the
+masters: "tu dilel pages images approved aahe") are the 87 boards of the design canvas
 **"FALCON – app and web design"** (a private claude.ai artifact of the owner). Each board is one screen at its real size: a phone
 390 × 844, the web 1440 wide. The names and numbers on them are made-up samples – the designs stay in the private canvas and are
 not copied into this public repository.
@@ -129,6 +130,22 @@ Page "Next – for approval" of the same canvas. N6 and N7 are screens of the ER
 | `n06-hr-home` | N6 · HR app Home – Mess card | 390 × 844 | rcl-mobile – HR Home | yes | rcl-mobile | not yet |
 | `n07-erp-home` | N7 · ERP app Home – Mess strip | 390 × 844 | rcl-mobile – ERP Home | yes | rcl-mobile | not yet |
 | `n08-from-hr` | N8 · FALCON opened from HR – no second sign-in | 390 × 844 | `/app` after the HR pass (web `#hrpass=`, the app's `falcon://hr`) | yes | yes | not yet |
+
+## Masters – Edit, Remove, From date – 8 screens (approved 23-11-2026: "tu dilel pages images approved aahe sagle ek sath banwayla ghe")
+
+Page "Masters – edit, remove, from date" of the same canvas. The web's pages of before keep their routes; these boards replace w02–w06 for
+what each row can do.
+
+| Board | Screen | Size | Where | Approved | Built | Checked live |
+|---|---|---|---|---|---|---|
+| `m01-messes` | M1 · Every mess – Edit · History · Remove, meal times with dates | 1440 wide | `/admin/mess` (Messes) | yes | yes | not yet |
+| `m02-edit-mess` | M2 · Edit a mess – site, contractor, place on the map, from date | 1440 wide | `/admin/mess` → Edit | yes | yes | not yet |
+| `m03-edit-times` | M3 · Edit meal times – from a date, or correct a mistake | 1440 wide | `/admin/mess` → meal times → Edit | yes | yes | not yet |
+| `m04-remove` | M4 · Remove – from a date, with the reason; stays in the record | 1440 wide | every Remove | yes | yes | not yet |
+| `m05-contractors` | M5 · Contractors – business, tax, bank, code, papers | 1440 wide | `/admin/mess` (Contractors) | yes | yes | not yet |
+| `m06-sites` | M6 · Sites, circles, sections | 1440 wide | `/admin/sites` | yes | yes – the Km column comes by itself (his later word) | not yet |
+| `m07-work-orders` | M7 · Work orders, rates, penalties, BOQ | 1440 wide | `/admin/work-orders` | yes | yes | not yet |
+| `m08-history` | M8 · History – who, when, before → after | 1440 wide | every History | yes | yes | not yet |
 
 ## Assets
 

@@ -31,6 +31,7 @@ const grants = roles.map((r, i) => ({ id: ID(200 + i), person_id: ID(1), role: r
 const TABLES = {
   people: [person], role_grants: grants, sites: [{ id: ID(10), code: 'S1', name: 'Test site', active: true }], companies: [{ id: ID(90), code: 'TST', name: 'Test Company' }],
   messes: [{ id: ID(30), name: 'Test Mess', site_id: ID(10), contractor_id: ID(40), counters: 2, active: true, lat: null, lng: null, radius_m: null, contractors: { name: 'Test Caterers' } }],
+  contractors: [{ id: ID(40), name: 'Test Caterers', kind: 'proprietor', contact_name: 'Made Up', contact_mobile: '+910000000040', gstin: null, pan: null, udyam: null, address: null, active: true, login_code: null }],
   circles: [{ id: ID(50), site_id: ID(10), code: 'A', name: 'Circle A', km_from: 0, km_to: 10 }],
   sections: [{ id: ID(20), site_id: ID(10), circle_id: ID(50), code: 'A1', name: 'A1', km: 2.4, place: 'office', lat: null, lng: null, active: true }],
   items: [{ id: ID(60), code: 'lunch', name: 'Lunch', kind: 'meal', meal: 'lunch', unit: 'plate', active: true }],
@@ -83,7 +84,7 @@ const ROUTES = ['/', '/start', '/start/employee', '/start/contractor', '/start/r
     // every picture of the page is there (the logo of 23-11-2026 too)
     const broken = await page.evaluate(() => [...document.images].filter((i) => i.complete && i.naturalWidth === 0).map((i) => i.getAttribute('src'))).catch(() => []);
     for (const b of broken) errs.push('picture not found: ' + b);
-    if (process.env.SMOKE_SHOTS && ['/start', '/start/employee', '/admin', '/admin/work-orders', '/admin/mess'].includes(p)) await page.screenshot({ path: path.join(process.env.SMOKE_SHOTS, (p.slice(1) || 'root').replace(/\//g, '_') + '.png') });
+    if (process.env.SMOKE_SHOTS && ['/start', '/start/employee', '/admin', '/admin/work-orders', '/admin/mess', '/admin/sites'].includes(p)) await page.screenshot({ path: path.join(process.env.SMOKE_SHOTS, (p.slice(1) || 'root').replace(/\//g, '_') + '.png') });
     const text = (await page.evaluate(() => document.body.innerText).catch(() => '')).replace(/\s+/g, ' ').slice(0, 90);
     const blank = text.trim().length < 3;
     const denied = /not open to you|not yours/i.test(text);
@@ -124,6 +125,37 @@ const ROUTES = ['/', '/start', '/start/employee', '/start/contractor', '/start/r
     if (missing.length || errs.length) bad.push({ p: 'place: ' + c.name, errs: [...errs, ...missing.map((m) => 'not shown: ' + m)] });
     console.log((missing.length || errs.length ? 'FAIL ' : 'ok   ') + 'place: ' + c.name);
     await cx.close();
+  }
+  // (23-11-2026, pictures M1–M8) the masters: Edit opens its side panel, Remove its box (from a date, the reason), History its list
+  const MCASES = [
+    { name: 'mess – Edit', path: '/admin/mess', click: [['button', 'Edit']], want: ['Edit · Test Mess', 'Place on the map', 'Latitude', 'Use my location', 'In use from', 'Why (kept in History)'] },
+    { name: 'mess – Remove', path: '/admin/mess', click: [['button', 'Remove']], want: ['Remove Test Mess?', 'From which date', 'Reason (must be given)', 'It stays in the record'] },
+    { name: 'mess – History', path: '/admin/mess', click: [['button', 'History']], want: ['History · Test Mess', 'Nothing changed yet.'] },
+    { name: 'meal times – Edit', path: '/admin/mess', click: [['button', 'Edit', 2]], want: ['Edit · Lunch · Test Mess', 'Which days get the new times?', 'From a date', 'Correct it from its start'] },
+    { name: 'section – Edit', path: '/admin/sites', click: [['button', 'Edit', -1]], want: ['Edit · Section A1', 'The Km comes by itself', 'Latitude'] },
+    { name: 'contractors', path: '/admin/mess', click: [['tab', 'Contractors']], want: ['New contractor', 'Papers', 'Sign-in code'] },
+    { name: 'rate – Edit', path: '/admin/work-orders', click: [['button', 'Edit', 2]], want: ['Edit · Lunch rate', 'Rate ₹', 'Not in a bill yet'] },
+  ];
+  for (const c of MCASES) {
+    const page = await ctx.newPage();
+    const errs = [];
+    page.on('pageerror', (e) => errs.push('pageerror: ' + e.message));
+    await page.goto('http://127.0.0.1:4179' + c.path, { waitUntil: 'networkidle', timeout: 20000 }).catch((e) => errs.push('goto: ' + e.message));
+    await page.waitForTimeout(400);
+    for (const [role, name, nth] of c.click) {
+      const all = page.getByRole(role, { name, exact: true });
+      const n = await all.count();
+      const i = nth == null ? 0 : nth < 0 ? n + nth : nth;
+      if (i < 0 || i >= n) { errs.push('no ' + role + ' "' + name + '" #' + i + ' (there are ' + n + ')'); continue; }
+      await all.nth(i).click().catch((e) => errs.push('click: ' + e.message));
+      await page.waitForTimeout(500);
+    }
+    const text = (await page.evaluate(() => document.body.innerText).catch(() => '')).replace(/\s+/g, ' ');
+    const missing = c.want.filter((w) => !text.includes(w));
+    if (process.env.SMOKE_SHOTS) await page.screenshot({ path: path.join(process.env.SMOKE_SHOTS, 'masters_' + c.name.replace(/[^a-z0-9]+/gi, '_') + '.png') });
+    if (missing.length || errs.length) bad.push({ p: 'masters: ' + c.name, errs: [...errs, ...missing.map((m) => 'not shown: ' + m)] });
+    console.log((missing.length || errs.length ? 'FAIL ' : 'ok   ') + 'masters: ' + c.name);
+    await page.close();
   }
   for (const b of bad) console.log('\n' + b.p + '\n  ' + b.errs.join('\n  '));
   await browser.close(); server.close();

@@ -4,6 +4,7 @@ import { supabase } from './supabase';
 import { api, call, db, one, rows } from './db';
 import { doorCode } from './door';
 import { keepHr } from './hrinfo';
+import { inUse, type Dated } from './dated';
 
 export type Role = 'employee' | 'guest' | 'mess_owner' | 'mess_operator' | 'mess_supervisor' | 'driver' | 'site_admin' | 'accounts' | 'management' | 'system_admin';
 
@@ -74,12 +75,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
     const [g, st, co] = await Promise.all([
       rows<Grant>(db().from('role_grants').select('id,role,site_id,mess_id,valid_from,valid_to').eq('person_id', p.id).is('revoked_at', null)),
-      rows<Site>(db().from('sites').select('id,code,name').eq('active', true).order('code')),
+      rows<Site & Dated>(db().from('sites').select('id,code,name,active,valid_from,valid_to').eq('active', true).order('code')),
       one<{ code: string }>(db().from('companies').select('code').limit(1)),
     ]);
     const t = today();
     setGrants(g.filter((x) => x.valid_from <= t && (!x.valid_to || x.valid_to >= t)));
-    setSites(st); setCompanyCode(co?.code || ''); setMe(p); setStatus('ready');
+    setSites(st.filter((x) => inUse(x)).map(({ id, code, name }) => ({ id, code, name }) as Site)); setCompanyCode(co?.code || ''); setMe(p); setStatus('ready');
     if (!p.portal_user) {
       try { const d = await api<{ code_needed: boolean }>('/api/device', { device_hash: await deviceHash() }); setNeedsCode(d.code_needed); }
       catch { setNeedsCode(false); }

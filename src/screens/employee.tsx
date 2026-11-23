@@ -12,6 +12,7 @@ import { GMap, pt, type Mark } from '../ui/GMap';
 import { atMess, directionsUrl, distText, metres, usePlace } from '../lib/geo';
 import { closeHrBanner, readHr } from '../lib/hrinfo';
 import { Body, Btn, Denied, Empty, ErrorLine, Failed, Field, Foot, Input, Loading, Screen, Seg, Stepper, Tabs, Top, CodeBoxes } from '../ui/kit';
+import { inUse, type Dated } from '../lib/dated';
 
 // ── shared data ──
 interface Mess { id: string; name: string; site_id: string; contractor_id: string | null; counters: number | null; lat: number | null; lng: number | null; radius_m: number | null }
@@ -37,13 +38,14 @@ export function useMyMess() {
   const s = useSession();
   const [pick, setPick] = useState(chosenMess());
   const site = s.me?.home_site_id;
-  const list = useLoad(() => rows<Mess>(db().from('messes').select('id,name,site_id,contractor_id,counters,lat,lng,radius_m').eq('active', true).order('name')), [s.me?.id]);
+  // (23-11-2026) only the messes in use today (From / Till – a removed one leaves the list)
+  const list = useLoad(() => rows<Mess & Dated>(db().from('messes').select('id,name,site_id,contractor_id,counters,lat,lng,radius_m,active,valid_from,valid_to').eq('active', true).order('name')).then((x) => x.filter((m) => inUse(m))), [s.me?.id]);
   const mess = list.data?.find((m) => m.id === pick) || list.data?.find((m) => m.site_id === site) || list.data?.[0] || null;
   const choose = (id: string) => { try { sessionStorage.setItem('falcon.mess', id); } catch { /* */ } setPick(id); };
   return { mess, list, choose };
 }
 export function useWindows(messId: string | undefined, date: string) {
-  return useLoad(() => messId ? rows<Win>(db().from('meal_windows').select('meal,serve_from,serve_to,order_by,change_minutes').eq('mess_id', messId)
+  return useLoad(() => messId ? rows<Win>(db().from('meal_windows').select('meal,serve_from,serve_to,order_by,change_minutes').eq('mess_id', messId).is('removed_at', null)
     .lte('valid_from', date).or('valid_to.is.null,valid_to.gte.' + date)) : Promise.resolve([] as Win[]), [messId, date]);
 }
 const hm = (t: string) => t.slice(0, 5);
@@ -62,8 +64,8 @@ function useItems() {
   return useLoad(() => rows<Item>(db().from('items').select('id,code,name,kind,meal').eq('active', true).order('name')), []);
 }
 function useSections(siteId: string | null | undefined) {
-  return useLoad(() => siteId ? rows<Sec>(db().from('sections').select('id,code,name,km,place,circle_id,lat,lng,circles(code,km_from,km_to)').eq('site_id', siteId).eq('active', true).order('km'))
-    : Promise.resolve([] as Sec[]), [siteId]);
+  return useLoad(() => siteId ? rows<Sec & Dated>(db().from('sections').select('id,code,name,km,place,circle_id,lat,lng,active,valid_from,valid_to,circles(code,km_from,km_to)').eq('site_id', siteId).eq('active', true).order('km'))
+    .then((x) => x.filter((y) => inUse(y))) : Promise.resolve([] as Sec[]), [siteId]);
 }
 const toMap = (secs: Sec[]) => {
   const circles = new Map<string, MapCircle>();

@@ -9,6 +9,7 @@ import { day, initials, maskMobile, mealName, MEALS, num, time, today } from '..
 import { Icon } from '../../ui/Icon';
 import { ErrorLine, Failed, Input, Loading } from '../../ui/kit';
 import { csv, Kpi, SitePick, Tbl, Web } from '../../ui/web';
+import { inUse, type Dated } from '../../lib/dated';
 
 interface Reg {
   id: string; code: string; site_id: string | null; section_id: string | null; typed_rcl_id: string | null; hr_result: string; hr_name: string | null;
@@ -29,7 +30,7 @@ export function Registrations() {
   const s = useSession();
   const [site, setSite] = useState(s.sites[0]?.id || '');
   const regs = useLoad(() => site ? rows<Reg>(db().from('registrations').select('*,p:people!registrations_person_id_fkey(id,full_name,mobile,mobile_verified_at,state,temporary_until,rcl_id,kind,home_section_id)').eq('site_id', site).order('created_at', { ascending: false }).limit(300)) : Promise.resolve([]), [site], ['registrations', 'people']);
-  const secs = useLoad(() => site ? rows<{ id: string; code: string }>(db().from('sections').select('id,code').eq('site_id', site).eq('active', true).order('code')) : Promise.resolve([]), [site]);
+  const secs = useLoad(() => site ? rows<{ id: string; code: string } & Dated>(db().from('sections').select('id,code,active,valid_from,valid_to').eq('site_id', site).eq('active', true).order('code')).then((x) => x.filter((y) => inUse(y))) : Promise.resolve([]), [site]);
   const [sel, setSel] = useState('');
   const list = (regs.data || []).slice().sort((x, y) => Number(WAITING.includes(y.p?.state || '')) - Number(WAITING.includes(x.p?.state || '')));
   const r = list.find((x) => x.id === sel) || list[0];

@@ -31,7 +31,7 @@ function useKitchen(messId: string | undefined, date = today()) {
   return useLoad(() => messId ? call<KOrder[]>('kitchen_orders', { p_mess: messId, p_date: date }) : Promise.resolve([] as KOrder[]), [messId, date], ['orders', 'order_lines']);
 }
 function useWins(messId: string | undefined, date = today()) {
-  return useLoad(() => messId ? rows<{ meal: Meal; serve_from: string; serve_to: string; order_by: string; change_minutes: number }>(db().from('meal_windows').select('meal,serve_from,serve_to,order_by,change_minutes').eq('mess_id', messId).lte('valid_from', date).or('valid_to.is.null,valid_to.gte.' + date)) : Promise.resolve([]), [messId, date]);
+  return useLoad(() => messId ? rows<{ meal: Meal; serve_from: string; serve_to: string; order_by: string; change_minutes: number }>(db().from('meal_windows').select('meal,serve_from,serve_to,order_by,change_minutes').eq('mess_id', messId).is('removed_at', null).lte('valid_from', date).or('valid_to.is.null,valid_to.gte.' + date)) : Promise.resolve([]), [messId, date]);
 }
 const curMeal = (w: { meal: Meal; serve_to: string; serve_from: string }[]): Meal => w.slice().sort((a, b) => a.serve_from.localeCompare(b.serve_from)).find((x) => nowHM() <= x.serve_to.slice(0, 5))?.meal || 'lunch';
 const itemsText = (o: KOrder) => {
