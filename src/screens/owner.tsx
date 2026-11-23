@@ -7,6 +7,7 @@ import { useSession } from '../lib/session';
 import { day, dayLong, inr, initials, leftText, maskMobile, mealIcon, mealName, MEALS, monthName, nowHM, time, today, type Meal } from '../lib/fmt';
 import { Icon } from '../ui/Icon';
 import { RoadMap } from '../ui/RoadMap';
+import { GMap, pt, type Mark } from '../ui/GMap';
 import { Body, Btn, Denied, Empty, ErrorLine, Failed, Field, Foot, Input, Loading, Screen, Seg, Sheet, Tabs, Top } from '../ui/kit';
 
 export const OWNER_TABS = [
@@ -23,7 +24,7 @@ interface KOrder { id: string; code: string; kind: 'meal' | 'parcel' | 'delivery
 export function useOwnerMess() {
   const s = useSession();
   const g = s.grants.find((x) => (x.role === 'mess_owner' || x.role === 'mess_operator') && x.mess_id);
-  const mess = useLoad(() => g?.mess_id ? one<{ id: string; name: string; site_id: string; contractor_id: string | null; contractors: { name: string } | null }>(db().from('messes').select('id,name,site_id,contractor_id,contractors(name)').eq('id', g.mess_id).limit(1)) : Promise.resolve(null), [g?.mess_id]);
+  const mess = useLoad(() => g?.mess_id ? one<{ id: string; name: string; site_id: string; contractor_id: string | null; lat: number | null; lng: number | null; contractors: { name: string } | null }>(db().from('messes').select('id,name,site_id,contractor_id,contractors(name)').eq('id', g.mess_id).limit(1)) : Promise.resolve(null), [g?.mess_id]);
   return { mess: mess.data, owner: g?.role === 'mess_owner', loading: mess.loading };
 }
 function useKitchen(messId: string | undefined, date = today()) {
@@ -291,7 +292,7 @@ function useBatch(id: string | undefined) {
     const b = await one<Batch>(db().from('batches').select('*').eq('id', id!).limit(1));
     if (!b) return null;
     const [stops, orders] = await Promise.all([
-      rows<{ id: string; seq: number; section_id: string; eta: string | null; reached_at: string | null; sections: { code: string; km: number | null; place: string | null } }>(db().from('batch_stops').select('id,seq,section_id,eta,reached_at,sections(code,km,place)').eq('batch_id', b.id).order('seq')),
+      rows<{ id: string; seq: number; section_id: string; eta: string | null; reached_at: string | null; sections: { code: string; km: number | null; place: string | null; lat: number | null; lng: number | null } }>(db().from('batch_stops').select('id,seq,section_id,eta,reached_at,sections(code,km,place,lat,lng)').eq('batch_id', b.id).order('seq')),
       rows<{ order_id: string; orders: { to_section_id: string; code: string } }>(db().from('batch_orders').select('order_id,orders(to_section_id,code)').eq('batch_id', b.id).is('removed_at', null)),
     ]);
     const [driver, vehicle] = await Promise.all([
@@ -359,7 +360,12 @@ export function BatchRoute() {
   return (
     <Screen>
       <div className="map" style={{ position: 'absolute', inset: '0 0 380px 0' }}>
-        <RoadMap sections={list.map((p) => ({ id: p.section_id, code: p.sections.code, km: p.sections.km }))} height={500} label="The stops of the batch on the road" />
+        {(() => {
+          // (23-11-2026) the Google map when the sections have their places; the drawn road otherwise
+          const marks = list.map((p, i) => { const q = pt(p.sections.lat, p.sections.lng); return q ? { ...q, kind: 'stop', label: String(i + 1), title: p.sections.code } as Mark : null; }).filter(Boolean) as Mark[];
+          return <GMap marks={marks} line={marks.map((m) => ({ lat: m.lat, lng: m.lng }))} height="100%" label="The stops of the batch on the map"
+            fallback={<RoadMap sections={list.map((p) => ({ id: p.section_id, code: p.sections.code, km: p.sections.km }))} height={500} label="The stops of the batch on the road" />} />;
+        })()}
       </div>
       <button className="ib" aria-label="Back" onClick={() => nav(-1)} style={{ position: 'absolute', left: 20, top: 18 }}><Icon name="chevron-left" /></button>
       <span className="chip" style={{ position: 'absolute', left: 76, top: 25, height: 32 }}><Icon name="route" size={14} />In order of the road</span>
@@ -421,14 +427,30 @@ export function BatchDispatch() {
 // ── o10 · Live deliveries ──
 export function Live() {
   const { mess } = useOwnerMess();
-  const batches = useLoad(() => mess ? rows<Batch & { batch_stops: { seq: number; reached_at: string | null }[] }>(db().from('batches').select('*,batch_stops(seq,reached_at)').eq('mess_id', mess.id).eq('service_date', today()).neq('state', 'cancelled').order('code')) : Promise.resolve([]), [mess?.id], ['batches', 'batch_stops']);
+  const batches = useLoad(() => mess ? rows<Batch & { batch_stops: { seq: number; reached_at: string | null; sections: { code: string; lat: number | null; lng: number | null } | null }[] }>(db().from('batches').select('*,batch_stops(seq,reached_at,sections(code,lat,lng))').eq('mess_id', mess.id).eq('service_date', today()).neq('state', 'cancelled').order('code')) : Promise.resolve([]), [mess?.id], ['batches', 'batch_stops']);
   const k = useKitchen(mess?.id);
+  // (23-11-2026, picture N5) the Google map: each van on the road where its driver's phone last said, its stops left, the mess
+  const roadIds = (batches.data || []).filter((b) => b.state === 'on_the_way').map((b) => b.id);
+  const vans = useLoad(() => roadIds.length ? rows<{ batch_id: string; lat: number; lng: number; at: string }>(db().from('track_points').select('batch_id,lat,lng,at')
+    .in('batch_id', roadIds).order('at', { ascending: false }).limit(200)) : Promise.resolve([]), [roadIds.join()], ['track_points']);
   if (!mess) return <NoMess />;
   const onRoad = (batches.data || []).filter((b) => b.state === 'on_the_way');
+
   const short = (k.data || []).flatMap((o) => o.lines.filter((l) => l.state === 'short').map((l) => ({ o, l })));
   return (
     <Screen>
-      <div className="map" style={{ position: 'absolute', inset: '0 0 430px 0', background: 'var(--navy)' }} />
+      <div className="map" style={{ position: 'absolute', inset: '0 0 430px 0', background: 'var(--navy)' }}>
+        {(() => {
+          const messPt = pt(mess.lat, mess.lng);
+          const marks: Mark[] = [];
+          onRoad.forEach((b) => {
+            const last = (vans.data || []).find((x) => x.batch_id === b.id);
+            (b.batch_stops || []).filter((x) => !x.reached_at).forEach((x) => { const q = x.sections && pt(x.sections.lat, x.sections.lng); if (q) marks.push({ ...q, kind: 'stop', label: x.sections!.code, title: b.code + ' · ' + x.sections!.code }); });
+            if (last) marks.push({ lat: Number(last.lat), lng: Number(last.lng), kind: 'van', label: b.code.slice(-3), title: b.code });
+          });
+          return <GMap marks={marks.length ? [...(messPt ? [{ ...messPt, kind: 'mess', title: mess.name } as Mark] : []), ...marks] : []} height="100%" label="Map: the vans on the road" fallback={null} />;
+        })()}
+      </div>
       <div className="row" style={{ position: 'absolute', left: 20, right: 20, top: 18 }}><span className="chip" style={{ height: 34 }}><span className="dot sf" />{onRoad.length} vans on the road</span></div>
       <div className="sheet" style={{ gap: 12, top: 120, overflowY: 'auto', paddingBottom: 100 }}>
         <div className="row"><b className="h2 sp">Live · today</b><Link className="chip" to="/owner/parcels">New batch</Link></div>

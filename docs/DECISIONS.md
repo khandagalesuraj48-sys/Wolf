@@ -95,13 +95,28 @@ Every decision here is the owner's. The newest wins. Nothing is built that is no
   ivory. Used for the web's browser tab and home-screen icon, the first screen, the office sidebar, and the Android app's icon and
   opening screen.
 
+* **Where he is and the meal by the server's clock** (23-11-2026 – "app swata check krel user kuthe aahe – mess location madhe to asel tr
+  mess ch auto yeil … lamb asel tr mess che direction kiti lamb te dakhwel ani auto parcel … day night auto select asel server time
+  asel"; pictures N1, N2 approved): inside the mess's area (its metres) → "At the mess" and the counter QR; away → how far (a straight
+  line), the way in Google Maps, "Parcel"; he can still switch. The meal of now follows the SERVER's clock (GET /api/start), never
+  the phone's. The phone's location is not saved or sent.
+* **Google Map** (23-11-2026 – "map lauya"; "erp chi key use kru"; pictures N2–N5): the ERP's own Google Maps key (`VITE_GOOGLE_MAPS_KEY`)
+  – the mess home, live tracking, the driver's route, the owner's route and live vans, choosing a section, the Sites page. Only the
+  Maps JavaScript API; no road time or route line along the road (that needs Google's Routes API – not on the key, his to decide).
+  Without the key or a place: the drawn road of before.
+* **Joined to HR, not to the ERP / Portal** (23-11-2026 – "falcon la erp madhe nahi hr madhe jodaych karan erp main aahe erp madhe hr
+  aahe ani falcon hr madhe asel … erp sathi pn jas apan attendance sathi keley te ethe pn ek asel"; pictures N6–N8): the HR app's
+  Home has a "Mess" card, the ERP app's Home a "Mess" strip under "Mark IN"; a tap opens FALCON signed in with a pass HR's server
+  signs (2 minutes, once; RCL ID, name, mobile, site, designation, today's first punch-in) – no company code, no WhatsApp code.
+  FALCON's own sign-in (company code → employee code → WhatsApp code) stays for everybody else.
+
 ## Not decided yet – asked before that part is built
-1. **Portal side of the one sign-in (later – when he joins it):** adding the module `falcon` in the Portal (Super Admin → Modules) and what its ticket
+1. **Portal side of the one sign-in** – 23-11-2026: FALCON is joined to HR instead (above); the Portal's module stays unbuilt: adding the module `falcon` in the Portal (Super Admin → Modules) and what its ticket
    carries; where FALCON's finer roles (Mess Owner … System Admin) are given – in the Portal's Users & Access, as HR's are, or in
    FALCON. A change in `rcl-portal` is its own piece of work.
 2. ~~HR look-up~~ – decided 23-11-2026 (above). Still open: a "present today" count from HR's attendance.
 3. **WhatsApp code for FALCON's own sign-in:** the same Meta number and the approved template `otp`, its token kept in FALCON's
    Vercel too.
-4. **Maps:** Google Maps (his choice for LION) – FALCON's key.
+4. ~~**Maps**~~ – decided 23-11-2026: Google Maps with the ERP's key (above). Still open: road time / route along the road (Routes API).
 5. ~~**The FALCON logo**~~ – decided 23-11-2026: B (above).
 6. **"Posted in the ERP":** which ledger a paid bill goes to.

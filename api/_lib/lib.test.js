@@ -166,3 +166,50 @@ describe('the first screen\'s code and the limits (23-11-2026)', () => {
     expect(asked).toMatchObject({ p_company_code: 'TST', p_rcl_id: 'RCL296' });
   });
 });
+
+// (23-11-2026) opened from HR: HR's pass, the meal on now by the server's clock
+import { signPass, readPass, mealNow, hrEmail, indian, PASS_MAX_SECONDS } from './hrpass.js';
+describe('HR\'s pass (opened from the HR app)', () => {
+  const S = 'a-made-up-word-of-thirty-two-letters!!';
+  const t = Math.floor(Date.now() / 1000);
+  const claims = { c: 'rcl0123', n: 'Made Up', m: '9876543210', s: 'vtr', d: 'Site Engineer', in: '08:52', day: '2026-11-23', exp: t + 120, jti: 'ab'.repeat(16) };
+  it('is taken when HR signed it, not expired: code, mobile, site as FALCON keeps them', () => {
+    const p = readPass(signPass(claims, S), S, t);
+    expect(p.code).toBe('RCL0123'); expect(p.mobile).toBe('+919876543210'); expect(p.site).toBe('VTR'); expect(p.in).toBe('08:52');
+  });
+  it('is refused when signed with another word, changed, expired, too long, without its number, mobile or code', () => {
+    expect(() => readPass(signPass(claims, S), S + 'x', t)).toThrow(/did not sign/);
+    const good = signPass(claims, S), parts = good.split('.');
+    const other = Buffer.from(JSON.stringify({ ...claims, c: 'RCL0999' })).toString('base64url');
+    expect(() => readPass(parts[0] + '.' + other + '.' + parts[2], S, t)).toThrow(/did not sign/);
+    expect(() => readPass(signPass({ ...claims, exp: t - 1 }, S), S, t)).toThrow(/expired/);
+    expect(() => readPass(signPass({ ...claims, exp: t + PASS_MAX_SECONDS + 60 }, S), S, t)).toThrow(/not valid/);
+    expect(() => readPass(signPass({ ...claims, jti: 'x' }, S), S, t)).toThrow(/not valid/);
+    expect(() => readPass(signPass({ ...claims, m: '12345' }, S), S, t)).toThrow(/no mobile/);
+    expect(() => readPass(signPass({ ...claims, c: '' }, S), S, t)).toThrow(/no employee code/);
+    expect(() => readPass('nonsense', S, t)).toThrow(/not a pass/);
+  });
+  it('is never read without the shared word set', () => {
+    expect(() => readPass(signPass(claims, S), '', t)).toThrow(/HR_FALCON_SECRET/);
+  });
+  it('a punch-in time that is not a time is left out', () => {
+    expect(readPass(signPass({ ...claims, in: '<b>' }, S), S, t).in).toBeNull();
+  });
+  it('one made-up address per employee, never his e-mail', () => {
+    expect(hrEmail('RCL', 'rcl0123')).toBe(hrEmail('rcl', 'RCL0123'));
+    expect(hrEmail('RCL', 'RCL0123')).toMatch(/^hr-[0-9a-f]{24}@falcon\.invalid$/);
+    expect(indian('+91 98765 43210')).toBe('+919876543210'); expect(indian('5876543210')).toBeNull();
+  });
+});
+describe('the meal on now (the server\'s clock)', () => {
+  const W = [{ meal: 'dinner', serve_from: '19:30:00', serve_to: '22:00:00', order_by: '19:00:00' },
+    { meal: 'breakfast', serve_from: '07:30:00', serve_to: '09:30:00', order_by: '07:00:00' },
+    { meal: 'lunch', serve_from: '12:00:00', serve_to: '14:30:00', order_by: '11:30:00' }];
+  it('morning: breakfast; noon: lunch (on now, parcels closed); evening: dinner (parcels until 19:00); night: nothing', () => {
+    expect(mealNow(W, '07:00').meal).toBe('breakfast');
+    expect(mealNow(W, '12:20')).toEqual({ meal: 'lunch', from: '12:00', to: '14:30', order_by: '11:30', now: true, parcel_open: false });
+    expect(mealNow(W, '15:00')).toMatchObject({ meal: 'dinner', now: false, parcel_open: true });
+    expect(mealNow(W, '22:30')).toBeNull();
+    expect(mealNow([], '12:00')).toBeNull();
+  });
+});

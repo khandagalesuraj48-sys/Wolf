@@ -5,6 +5,7 @@
 //   POST /api/start {door, mobile}          → a contractor's code: is this mobile given for it (owner / operator)? → a 10-minute token
 //   POST /api/start {token, send}           → the WhatsApp code goes to that mobile (Supabase's own sign-in code, through the hook)
 //   POST /api/start {token, code}           → the code checked; the answer is his session (and the company)
+//   GET  /api/start                          → the server's clock {now} (23-11-2026: the meal by the server's time)
 // The mobile of HR never reaches the browser. Look-ups are limited per place (internet address); codes per mobile (the hook).
 // {rcl_id} without a company (an app of before) = this FALCON's own company.
 import { handler, body, Fail } from './_lib/http.js';
@@ -16,7 +17,9 @@ import { doorOf, companyFor, clientIp, limit } from './_lib/door.js';
 const mask = (m) => m.slice(0, 3) + ' ' + m.slice(3, 5) + 'XXX XX' + m.slice(-3);
 const indian = (v) => { const d = String(v || '').replace(/\D/g, ''); const t = d.slice(-10); return /^[6-9][0-9]{9}$/.test(t) ? '+91' + t : null; };
 
-export default handler(['POST'], async (req) => {
+export default handler(['GET', 'POST'], async (req) => {
+  // (23-11-2026) GET: the server's clock – the screens choose the meal by it, never by the phone's own time
+  if (req.method === 'GET') return { ok: true, now: new Date().toISOString() };
   const b = body(req);
   if (b.token) {
     const t = await rpc('server_start_resolve', { p_token: String(b.token) });
