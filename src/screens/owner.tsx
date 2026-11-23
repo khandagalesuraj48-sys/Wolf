@@ -1,5 +1,5 @@
 // The mess owner's app – boards o01–o16 (an operator sees the kitchen's part). Everything through the database's checked functions.
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { call, db, one, rows, settingNum, useAct, useLoad, useSettings } from '../lib/db';
@@ -8,6 +8,7 @@ import { day, dayLong, inr, initials, leftText, maskMobile, mealIcon, mealName, 
 import { Icon } from '../ui/Icon';
 import { RoadMap } from '../ui/RoadMap';
 import { GMap, pt, type Mark } from '../ui/GMap';
+import { directionsUrl, distText, metres } from '../lib/geo';
 import { Body, Btn, Denied, Empty, ErrorLine, Failed, Field, Foot, Input, Loading, Screen, Seg, Sheet, Tabs, Top } from '../ui/kit';
 
 export const OWNER_TABS = [
@@ -19,12 +20,21 @@ export const OWNER_TABS = [
 interface KLine { id: string; person: string; person_id: string; role: string | null; item: string; code: string; is_meal: boolean; qty: number; state: string; delivered_qty: number | null; short_qty: number | null; confirmed: string | null }
 interface KOrder { id: string; code: string; kind: 'meal' | 'parcel' | 'delivery'; meal: Meal; state: string; host_state: string; created_at: string; accepted_at: string | null; change_until: string | null;
   ready_at: string | null; is_group: boolean; guest: boolean; note: string | null; requester: string; requester_role: string | null; batch: string | null;
-  section: { id: string; code: string; km: number | null; place: string | null; circle: string | null } | null; lines: KLine[] }
+  section: { id: string; code: string; name?: string; km: number | null; place: string | null; lat?: number | null; lng?: number | null } | null;
+  point?: { lat: number; lng: number } | null; lines: KLine[] }
+// (0017, his word: "only section … section che baheun koni kel asel tr … location direction he sagle hot jail") a van order goes to a
+// section or – asked from outside every section – to the person's location: the kitchen sees how far it is and Google's directions.
+const where = (o: KOrder) => o.section?.code || (o.point ? 'Location' : null);
+const farOf = (o: KOrder, mess: { lat: number | null; lng: number | null } | null | undefined) =>
+  o.point && mess?.lat != null && mess?.lng != null ? distText(metres({ lat: Number(mess.lat), lng: Number(mess.lng) }, { lat: Number(o.point.lat), lng: Number(o.point.lng) })) : null;
+function Directions({ to, label = 'Directions' }: { to: { lat: number; lng: number }; label?: string }) {
+  return <a className="chip" href={directionsUrl({ lat: Number(to.lat), lng: Number(to.lng) })} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ height: 28, textDecoration: 'none' }}><Icon name="navigation" size={14} />{label}</a>;
+}
 
 export function useOwnerMess() {
   const s = useSession();
   const g = s.grants.find((x) => (x.role === 'mess_owner' || x.role === 'mess_operator') && x.mess_id);
-  const mess = useLoad(() => g?.mess_id ? one<{ id: string; name: string; site_id: string; contractor_id: string | null; lat: number | null; lng: number | null; contractors: { name: string } | null }>(db().from('messes').select('id,name,site_id,contractor_id,contractors(name)').eq('id', g.mess_id).limit(1)) : Promise.resolve(null), [g?.mess_id]);
+  const mess = useLoad(() => g?.mess_id ? one<{ id: string; name: string; site_id: string; contractor_id: string | null; lat: number | null; lng: number | null; contractors: { name: string } | null }>(db().from('messes').select('id,name,site_id,contractor_id,lat,lng,contractors(name)').eq('id', g.mess_id).limit(1)) : Promise.resolve(null), [g?.mess_id]);
   return { mess: mess.data, owner: g?.role === 'mess_owner', loading: mess.loading };
 }
 function useKitchen(messId: string | undefined, date = today()) {
@@ -100,20 +110,20 @@ export function Requests() {
   const { mess } = useOwnerMess();
   const wins = useWins(mess?.id);
   const k = useKitchen(mess?.id);
-  const [by, setBy] = useState<'circle' | 'section' | 'person' | 'order'>('circle');
+  const [by, setBy] = useState<'section' | 'person' | 'order'>('section');
   const a = useAct();
   if (!mess) return <NoMess />;
   const meal = curMeal(wins.data || []), w = (wins.data || []).find((x) => x.meal === meal);
   const waiting = (k.data || []).filter((o) => o.state === 'requested');
   const ready = waiting.filter((o) => !o.change_until || new Date(o.change_until) < new Date());
-  const key = (o: KOrder) => by === 'circle' ? (o.section ? 'Circle ' + o.section.circle : o.kind === 'meal' ? 'At the mess' : 'Collect at the mess') : by === 'section' ? (o.section?.code || 'At the mess') : by === 'person' ? o.requester : o.code;
+  const key = (o: KOrder) => by === 'section' ? (o.section ? 'Section ' + o.section.code : o.point ? 'Outside the sections' : o.kind === 'meal' ? 'At the mess' : 'Collect at the mess') : by === 'person' ? o.requester : o.code;
   const groups = [...new Set(waiting.map(key))];
   const acceptAll = () => a.run(async () => { for (const o of ready) await call('kitchen_decide', { p_order: o.id, p_accept: true }); k.reload(); });
   return (
     <Screen>
       <Top back="/owner" title={'New requests · ' + waiting.length} sub={mealName(meal) + (w ? ' · they can still change for up to ' + w.change_minutes + ' min' : '')} />
       <Body style={{ gap: 12, paddingBottom: 12 }}>
-        <Seg value={by} options={[{ v: 'circle', label: 'Circle' }, { v: 'section', label: 'Section' }, { v: 'person', label: 'Person' }, { v: 'order', label: 'Order' }]} onChange={setBy} />
+        <Seg value={by} options={[{ v: 'section', label: 'Section' }, { v: 'person', label: 'Person' }, { v: 'order', label: 'Order' }]} onChange={setBy} />
         {k.loading && !k.data ? <Loading /> : k.error ? <Failed error={k.error} retry={k.reload} /> : waiting.length === 0 ? <Empty icon="receipt" title="No new requests" text="New ones come here as they are asked." /> :
           groups.map((g) => {
             const list = waiting.filter((o) => key(o) === g);
@@ -124,7 +134,7 @@ export function Requests() {
                 const open = o.change_until && new Date(o.change_until) > new Date();
                 return <div key={o.id} className="card" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10, ...(o.guest ? { borderColor: '#C9D7F2' } : {}) }}>
                   <Link to={'/owner/requests/' + o.id} className="row" style={{ textDecoration: 'none', color: 'inherit' }}><div className={'av ' + (o.guest ? 'plum' : '')}>{initials(o.requester)}</div>
-                    <div className="sp"><b style={{ fontSize: 15 }}>{o.requester}{o.guest && <span className="tag" style={{ background: 'var(--plumS)', color: '#5B2BA0', marginLeft: 6 }}>Guest</span>}{o.is_group && <span className="tag" style={{ marginLeft: 6 }}>Group · {o.lines.filter((l) => l.is_meal).length}</span>}</b><div className="xs">{o.requester_role || ''}{o.section ? ' · ' + o.section.code + (o.section.km != null ? ' Km ' + o.section.km : '') : ''}</div></div>
+                    <div className="sp"><b style={{ fontSize: 15 }}>{o.requester}{o.guest && <span className="tag" style={{ background: 'var(--plumS)', color: '#5B2BA0', marginLeft: 6 }}>Guest</span>}{o.is_group && <span className="tag" style={{ marginLeft: 6 }}>Group · {o.lines.filter((l) => l.is_meal).length}</span>}</b><div className="xs">{o.requester_role || ''}{o.section ? ' · ' + o.section.code + (o.section.km != null ? ' Km ' + o.section.km : '') : o.point ? ' · Location' + (farOf(o, mess) ? ', ' + farOf(o, mess) + ' from the mess' : '') : ''}</div></div>
                     <span className={'chip ' + (open ? 'amber' : '')} style={{ height: 26 }}>{open ? <><Icon name="timer" size={14} />{leftText(o.change_until!)}</> : 'Ready'}</span></Link>
                   <div className="row sm" style={{ gap: 8 }}><Icon name={o.kind === 'meal' ? 'utensils' : 'package'} size={16} /><span className="sp">{mealName(o.meal)} {o.kind === 'meal' ? 'at the mess' : 'parcel'} · {itemsText(o)}</span><span className="tag">{o.code}</span></div>
                   {extras.map((x) => <div key={x.id} className="row" style={{ gap: 8 }}><span className="sp xs">Extra: <b style={{ color: 'var(--sfD)' }}>{x.item} {x.qty}</b></span>
@@ -170,7 +180,8 @@ export function RequestDetail() {
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {o.lines.map((l) => <div className="row" key={l.id}><span className="sp" style={{ fontSize: 15, ...(l.state === 'cancelled' ? { textDecoration: 'line-through', color: 'var(--muted)' } : {}) }}>{l.item}{o.is_group ? ' · ' + l.person : ''}</span><b>{l.qty}</b></div>)}
           <div className="hr" />
-          <div className="row sm"><Icon name="map-pin" size={16} /><span className="sp">{o.section ? o.section.code + (o.section.place ? ' ' + o.section.place : '') + ' · with the van' : o.kind === 'parcel' ? 'Collected at the mess' : 'At the mess'}</span></div>
+          <div className="row sm"><Icon name={o.point ? 'locate-fixed' : 'map-pin'} size={16} /><span className="sp">{o.section ? o.section.code + (o.section.place ? ' ' + o.section.place : '') + ' · with the van' : o.point ? 'His location – outside the sections' + (farOf(o, mess) ? ' · ' + farOf(o, mess) + ' from the mess' : '') + ' · with the van' : o.kind === 'parcel' ? 'Collected at the mess' : 'At the mess'}</span>
+            {o.point && <Directions to={o.point} />}</div>
           {o.note && <div className="row sm"><Icon name="message-circle" size={16} /><span className="sp">{o.note}</span></div>}
         </div>
         <ErrorLine error={a.error} />
@@ -207,7 +218,7 @@ export function Kitchen() {
   const counter = all.filter((o) => o.kind === 'meal' && ['accepted', 'preparing', 'ready', 'delivered'].includes(o.state));
   const tot = new Map<string, number>(); prep.forEach((o) => o.lines.filter((l) => l.state !== 'cancelled').forEach((l) => tot.set(l.item, (tot.get(l.item) || 0) + l.qty)));
   const bySec = new Map<string, { ready: number; all: number; km: number | null }>();
-  [...prep, ...ready].forEach((o) => { const kk = o.section?.code || 'Collect'; const v = bySec.get(kk) || { ready: 0, all: 0, km: o.section?.km ?? null }; v.all++; if (o.state === 'ready') v.ready++; bySec.set(kk, v); });
+  [...prep, ...ready].forEach((o) => { const kk = where(o) || 'Collect'; const v = bySec.get(kk) || { ready: 0, all: 0, km: o.section?.km ?? null }; v.all++; if (o.state === 'ready') v.ready++; bySec.set(kk, v); });
   const chosen = prep.filter((o) => sel[o.id]);
   const markReady = () => a.run(async () => { for (const o of chosen) await call('kitchen_step', { p_order: o.id, p_state: 'ready' }); setSel({}); k.reload(); });
   return (
@@ -225,11 +236,11 @@ export function Kitchen() {
           {prep.length === 0 ? <Empty icon="chef-hat" title="Nothing to prepare" /> : prep.map((o) => (
             <button key={o.id} className="card" onClick={() => setSel((x) => ({ ...x, [o.id]: !x[o.id] }))} style={{ padding: 12, display: 'flex', gap: 12, alignItems: 'center', font: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
               <span style={{ width: 26, height: 26, borderRadius: 8, background: sel[o.id] ? 'var(--leaf)' : 'transparent', border: sel[o.id] ? 0 : '1.5px solid var(--line2)', color: '#fff', display: 'grid', placeItems: 'center' }}>{sel[o.id] && <Icon name="check" size={16} />}</span>
-              <div className="sp"><b style={{ fontSize: 14 }}>{o.code} · {o.requester}</b><div className="xs">{o.section?.code || 'collect'} · {itemsText(o)}</div></div><span className="xs">{time(o.accepted_at)}</span></button>))}
+              <div className="sp"><b style={{ fontSize: 14 }}>{o.code} · {o.requester}</b><div className="xs">{where(o) || 'collect'} · {itemsText(o)}</div></div><span className="xs">{time(o.accepted_at)}</span></button>))}
         </>}
         {tab === 'ready' && (ready.length === 0 ? <Empty icon="package-check" title="Nothing ready" /> : ready.map((o) => (
           <div key={o.id} className="card" style={{ padding: 12, display: 'flex', gap: 12, alignItems: 'center' }}><span style={{ width: 26, height: 26, borderRadius: 8, background: 'var(--leaf)', color: '#fff', display: 'grid', placeItems: 'center' }}><Icon name="check" size={16} /></span>
-            <div className="sp"><b style={{ fontSize: 14 }}>{o.code} · {o.requester}</b><div className="xs">{o.section?.code || 'collect at the mess'} · {itemsText(o)}{o.batch ? ' · ' + o.batch : ''}</div></div><span className="xs">{time(o.ready_at)}</span></div>)))}
+            <div className="sp"><b style={{ fontSize: 14 }}>{o.code} · {o.requester}</b><div className="xs">{where(o) || 'collect at the mess'} · {itemsText(o)}{o.batch ? ' · ' + o.batch : ''}</div></div><span className="xs">{time(o.ready_at)}</span></div>)))}
         {tab === 'counter' && (counter.length === 0 ? <Empty icon="utensils" title="Nobody at the counter" /> : counter.map((o) => o.lines.filter((l) => l.state !== 'cancelled').map((l) => (
           <div key={l.id} className="card" style={{ padding: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
             <div className="sp"><b style={{ fontSize: 14 }}>{l.person} · {l.item}{l.qty > 1 ? ' × ' + l.qty : ''}</b><div className="xs">{o.code}</div></div>
@@ -244,7 +255,7 @@ export function Kitchen() {
   );
 }
 
-// ── o05 · o06 · Ready parcels by section → a delivery batch ──
+// ── o05 · o06 · Ready parcels by section → a delivery batch ── (0017: sections, and each location outside the sections a stop of its own)
 export function Parcels() {
   const nav = useNavigate();
   const { mess } = useOwnerMess();
@@ -253,47 +264,61 @@ export function Parcels() {
   const a = useAct();
   if (!mess) return <NoMess />;
   const ready = (k.data || []).filter((o) => o.kind === 'delivery' && ['accepted', 'preparing', 'ready'].includes(o.state) && !o.batch);
-  const circles = [...new Set(ready.map((o) => o.section?.circle || '–'))].sort();
-  const take = ready.filter((o) => !left[o.section?.id || '']);
-  const sections = [...new Set(take.map((o) => o.section?.code))];
+  const stopOf = (o: KOrder) => o.section?.id || 'p-' + o.id;
+  const take = ready.filter((o) => !left[stopOf(o)]);
+  const stops = [...new Set(take.map(stopOf))];
   const meal = take[0]?.meal;
   const make = () => a.run(async () => {
     const one = take.filter((o) => o.meal === meal);
     const id = await call<string>('make_batch', { p_mess: mess.id, p_date: today(), p_meal: meal, p_orders: one.map((o) => o.id) });
     nav('/owner/batches/' + id + '/driver');
   });
-  const colors = ['var(--leafS)', 'var(--blueS)', 'var(--sfS)', 'var(--plumS)'], dots = ['var(--leaf)', 'var(--blue)', '#C2560E', '#5B2BA0'];
+  const secs = [...new Map(ready.filter((o) => o.section).map((o) => [o.section!.id, o.section!])).values()].sort((x, y) => (x.km ?? 0) - (y.km ?? 0) || x.code.localeCompare(y.code, undefined, { numeric: true }));
+  const pts = ready.filter((o) => !o.section && o.point);
+  const row = (key: string, i: number, n: number, body: ReactNode, count: ReactNode) =>
+    <div key={key} role="button" tabIndex={0} onClick={() => setLeft((x) => ({ ...x, [key]: !x[key] }))} onKeyDown={(e) => e.key === 'Enter' && setLeft((x) => ({ ...x, [key]: !x[key] }))} className="row sm"
+      style={{ padding: '10px 16px', borderBottom: i < n - 1 ? '1px solid var(--line)' : 0, cursor: 'pointer', opacity: left[key] ? 0.45 : 1, gap: 8 }}>{body}{count}</div>;
   return (
     <Screen>
-      <Top back="/owner/kitchen" title={'Parcels for the van · ' + ready.length} sub="Grouped by circle and section" />
+      <Top back="/owner/kitchen" title={'Parcels for the van · ' + ready.length} sub="By section – and the locations outside the sections" />
       <Body style={{ gap: 12, paddingBottom: 12 }}>
-        {k.loading && !k.data ? <Loading /> : ready.length === 0 ? <Empty icon="package" title="No parcels waiting for a van" /> : circles.map((c, ci) => {
-          const secs = [...new Map(ready.filter((o) => (o.section?.circle || '–') === c).map((o) => [o.section!.id, o.section!])).values()].sort((x, y) => (x.km ?? 0) - (y.km ?? 0));
-          return <div key={c} className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            <div className="row" style={{ padding: '14px 16px', background: colors[ci % 4] }}><span style={{ width: 24, height: 24, borderRadius: 7, background: dots[ci % 4], color: '#fff', display: 'grid', placeItems: 'center' }}><Icon name="check" size={14} /></span><b className="sp">Circle {c}</b><b>{ready.filter((o) => (o.section?.circle || '–') === c).length}</b></div>
-            {secs.map((s, i) => <button key={s.id} onClick={() => setLeft((x) => ({ ...x, [s.id]: !x[s.id] }))} className="row sm" style={{ padding: '10px 16px', borderBottom: i < secs.length - 1 ? '1px solid var(--line)' : 0, width: '100%', background: 'none', border: 0, font: 'inherit', textAlign: 'left', cursor: 'pointer', opacity: left[s.id] ? 0.45 : 1 }}>
-              <span className="sp">{s.code}{s.km != null ? ' · Km ' + s.km : ''}{s.place ? ' · ' + s.place : ''}{left[s.id] ? ' · next van' : ''}</span><b style={{ color: 'var(--ink)' }}>{ready.filter((o) => o.section?.id === s.id).length}</b></button>)}
-          </div>;
-        })}
-        <div className="row xs" style={{ gap: 8 }}><Icon name="info" size={14} /><span className="sp">Tap a section to leave it for the next van.</span></div>
+        {k.loading && !k.data ? <Loading /> : ready.length === 0 ? <Empty icon="package" title="No parcels waiting for a van" /> : <>
+          {secs.length > 0 && <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div className="row" style={{ padding: '14px 16px', background: 'var(--leafS)' }}><span style={{ width: 24, height: 24, borderRadius: 7, background: 'var(--leaf)', color: '#fff', display: 'grid', placeItems: 'center' }}><Icon name="map-pin" size={14} /></span><b className="sp">Sections</b><b>{ready.filter((o) => o.section).length}</b></div>
+            {secs.map((x, i) => row(x.id, i, secs.length, <span className="sp">{x.code}{x.name && x.name !== x.code ? ' – ' + x.name : ''}{x.km != null ? ' · Km ' + x.km : ''}{x.place ? ' · ' + x.place : ''}{left[x.id] ? ' · next van' : ''}</span>,
+              <b style={{ color: 'var(--ink)' }}>{ready.filter((o) => o.section?.id === x.id).length}</b>))}
+          </div>}
+          {pts.length > 0 && <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div className="row" style={{ padding: '14px 16px', background: 'var(--blueS)' }}><span style={{ width: 24, height: 24, borderRadius: 7, background: 'var(--blue)', color: '#fff', display: 'grid', placeItems: 'center' }}><Icon name="locate-fixed" size={14} /></span><b className="sp">Outside the sections · their locations</b><b>{pts.length}</b></div>
+            {pts.map((o, i) => row('p-' + o.id, i, pts.length, <span className="sp">{o.requester}{farOf(o, mess) ? ' · ' + farOf(o, mess) + ' from the mess' : ''} · {o.code}{left['p-' + o.id] ? ' · next van' : ''}</span>,
+              <Directions to={o.point!} />))}
+          </div>}
+        </>}
+        <div className="row xs" style={{ gap: 8 }}><Icon name="info" size={14} /><span className="sp">Tap a section or a location to leave it for the next van. The stops go nearest to the mess first – you can change the order on the route.</span></div>
         <ErrorLine error={a.error} />
       </Body>
       <Foot>
-        <div className="row sm"><span className="sp">{sections.length} stops</span><b style={{ color: 'var(--ink)' }}>{take.length} parcels</b></div>
+        <div className="row sm"><span className="sp">{stops.length} stops</span><b style={{ color: 'var(--ink)' }}>{take.length} parcels</b></div>
         <Btn kind="navy" onClick={make} busy={a.busy} disabled={!take.length}><Icon name="layers" />Make a delivery batch</Btn>
       </Foot>
     </Screen>
   );
 }
 
+// a stop of a batch: a section, or (0017) one order's location outside the sections
+interface Stop { id: string; seq: number; section_id: string | null; order_id: string | null; eta: string | null; reached_at: string | null;
+  sections: { code: string; km: number | null; place: string | null; lat: number | null; lng: number | null } | null; orders: { code: string; to_lat: number | null; to_lng: number | null } | null }
+const stopKey = (x: { section_id: string | null; order_id: string | null }) => x.section_id || 'p-' + x.order_id;
+const stopName = (x: Stop) => x.sections ? x.sections.code : 'Location · ' + (x.orders?.code || '');
+const stopAt = (x: Stop) => x.sections ? pt(x.sections.lat, x.sections.lng) : x.orders ? pt(x.orders.to_lat, x.orders.to_lng) : null;
 interface Batch { id: string; code: string; state: string; meal: Meal; service_date: string; driver_id: string | null; vehicle_id: string | null; planned_km: number | null; planned_minutes: number | null; dispatched_at: string | null; completed_at: string | null; vehicle_check: Record<string, unknown> | null; refused_reason: string | null }
 function useBatch(id: string | undefined) {
   return useLoad(async () => {
     const b = await one<Batch>(db().from('batches').select('*').eq('id', id!).limit(1));
     if (!b) return null;
     const [stops, orders] = await Promise.all([
-      rows<{ id: string; seq: number; section_id: string; eta: string | null; reached_at: string | null; sections: { code: string; km: number | null; place: string | null; lat: number | null; lng: number | null } }>(db().from('batch_stops').select('id,seq,section_id,eta,reached_at,sections(code,km,place,lat,lng)').eq('batch_id', b.id).order('seq')),
-      rows<{ order_id: string; orders: { to_section_id: string; code: string } }>(db().from('batch_orders').select('order_id,orders(to_section_id,code)').eq('batch_id', b.id).is('removed_at', null)),
+      rows<Stop>(db().from('batch_stops').select('id,seq,section_id,order_id,eta,reached_at,sections(code,km,place,lat,lng),orders(code,to_lat,to_lng)').eq('batch_id', b.id).order('seq')),
+      rows<{ order_id: string; orders: { to_section_id: string | null; code: string } }>(db().from('batch_orders').select('order_id,orders(to_section_id,code)').eq('batch_id', b.id).is('removed_at', null)),
     ]);
     const [driver, vehicle] = await Promise.all([
       b.driver_id ? call<{ person_id: string; full_name: string; mobile: string | null }[]>('batch_driver', { p_batch: b.id }).catch(() => []) : Promise.resolve([]),
@@ -345,34 +370,42 @@ export function BatchRoute() {
   const { id } = useParams();
   const nav = useNavigate();
   const bt = useBatch(id);
+  const { mess } = useOwnerMess();
   const [order, setOrder] = useState<string[] | null>(null);
   const a = useAct();
   const stops = bt.data?.stops || [];
-  const seq = order || stops.map((s) => s.section_id);
-  const list = seq.map((sid) => stops.find((s) => s.section_id === sid)!).filter(Boolean);
+  const seq = order || stops.map(stopKey);
+  const list = seq.map((sid) => stops.find((s) => stopKey(s) === sid)!).filter(Boolean);
   const set = useSettings(['delivery.speed_kmh', 'delivery.stop_minutes'], today());
   const speed = Math.max(5, settingNum(set.data, 'delivery.speed_kmh', 30)), stopMin = Math.max(0, settingNum(set.data, 'delivery.stop_minutes', 4));   // only to suggest ETAs; the van's real times are kept
-  let km = 0, prev = 0; const start = Date.now();
-  const plan = list.map((s, i) => { const k2 = s.sections.km ?? prev; km += Math.abs(k2 - prev); prev = k2; return { s, eta: new Date(start + ((km / speed) * 60 + i * stopMin) * 60000) }; });
+  // (0017) every stop has its place and so has the mess: the km in straight lines from the mess, stop to stop; else by chainage as before
+  const messPt = mess ? pt(mess.lat, mess.lng) : null;
+  const byPlace = !!messPt && list.length > 0 && list.every((s) => stopAt(s));
+  let km = 0, prev = 0, at = messPt; const start = Date.now();
+  const plan = list.map((s, i) => {
+    if (byPlace) { const q = stopAt(s)!; km += metres(at!, q) / 1000; at = q; } else { const k2 = s.sections?.km ?? prev; km += Math.abs(k2 - prev); prev = k2; }
+    return { s, eta: new Date(start + ((km / speed) * 60 + i * stopMin) * 60000) };
+  });
   const mins = Math.round((km / speed) * 60 + list.length * stopMin);
   const move = (i: number, d: number) => { const x = [...seq]; const j = i + d; if (j < 0 || j >= x.length) return; [x[i], x[j]] = [x[j]!, x[i]!]; setOrder(x); };
-  const save = () => a.run(async () => { await call('set_route', { p_batch: id, p_stops: plan.map((p) => ({ section: p.s.section_id, eta: p.eta.toISOString() })), p_km: Math.round(km * 10) / 10, p_minutes: mins }); nav('/owner/batches/' + id + '/dispatch'); });
+  const save = () => a.run(async () => { await call('set_route', { p_batch: id, p_stops: plan.map((p) => (p.s.section_id ? { section: p.s.section_id, eta: p.eta.toISOString() } : { order: p.s.order_id, eta: p.eta.toISOString() })), p_km: Math.round(km * 10) / 10, p_minutes: mins }); nav('/owner/batches/' + id + '/dispatch'); });
   return (
     <Screen>
       <div className="map" style={{ position: 'absolute', inset: '0 0 380px 0' }}>
         {(() => {
           // (23-11-2026) the Google map when the sections have their places; the drawn road otherwise
-          const marks = list.map((p, i) => { const q = pt(p.sections.lat, p.sections.lng); return q ? { ...q, kind: 'stop', label: String(i + 1), title: p.sections.code } as Mark : null; }).filter(Boolean) as Mark[];
+          const marks = list.map((p, i) => { const q = stopAt(p); return q ? { ...q, kind: 'stop', label: String(i + 1), title: stopName(p) } as Mark : null; }).filter(Boolean) as Mark[];
           return <GMap marks={marks} line={marks.map((m) => ({ lat: m.lat, lng: m.lng }))} height="100%" label="The stops of the batch on the map"
-            fallback={<RoadMap sections={list.map((p) => ({ id: p.section_id, code: p.sections.code, km: p.sections.km }))} height={500} label="The stops of the batch on the road" />} />;
+            fallback={<RoadMap sections={list.filter((p) => p.sections).map((p) => ({ id: stopKey(p), code: p.sections!.code, km: p.sections!.km }))} height={500} label="The stops of the batch on the road" />} />;
         })()}
       </div>
       <button className="ib" aria-label="Back" onClick={() => nav(-1)} style={{ position: 'absolute', left: 20, top: 18 }}><Icon name="chevron-left" /></button>
-      <span className="chip" style={{ position: 'absolute', left: 76, top: 25, height: 32 }}><Icon name="route" size={14} />In order of the road</span>
+      <span className="chip" style={{ position: 'absolute', left: 76, top: 25, height: 32 }}><Icon name="route" size={14} />Nearest first</span>
       <div className="sheet">
-        <div className="row" style={{ gap: 10 }}><div className="sp"><span className="big" style={{ fontSize: 28 }}>{mins} min</span><div className="xs">{Math.round(km * 10) / 10} km by chainage · estimated at {speed} km/h, {stopMin} min a stop</div></div></div>
-        <div className="col" style={{ gap: 0 }}>{plan.map((p, i) => <div key={p.s.section_id} className="row" style={{ padding: '7px 0', borderBottom: i < plan.length - 1 ? '1px solid var(--line)' : 0 }}>
-          <span className="av navy" style={{ width: 26, height: 26, fontSize: 12 }}>{i + 1}</span><span className="sp" style={{ fontSize: 14 }}>{p.s.sections.code}{p.s.sections.km != null ? ' · Km ' + p.s.sections.km : ''} · {(bt.data?.orders || []).filter((o) => o.orders.to_section_id === p.s.section_id).length} parcels</span>
+        <div className="row" style={{ gap: 10 }}><div className="sp"><span className="big" style={{ fontSize: 28 }}>{mins} min</span><div className="xs">{Math.round(km * 10) / 10} km {byPlace ? 'in straight lines' : 'by chainage'} · estimated at {speed} km/h, {stopMin} min a stop</div></div></div>
+        <div className="col" style={{ gap: 0 }}>{plan.map((p, i) => <div key={stopKey(p.s)} className="row" style={{ padding: '7px 0', borderBottom: i < plan.length - 1 ? '1px solid var(--line)' : 0 }}>
+          <span className="av navy" style={{ width: 26, height: 26, fontSize: 12 }}>{i + 1}</span><span className="sp" style={{ fontSize: 14 }}>{stopName(p.s)}{p.s.sections?.km != null ? ' · Km ' + p.s.sections.km : ''} · {p.s.section_id ? (bt.data?.orders || []).filter((o) => o.orders.to_section_id === p.s.section_id).length : 1} parcels</span>
+          {!p.s.sections && stopAt(p.s) && <Directions to={stopAt(p.s)!} label="Map" />}
           <b className="xs">{time(p.eta.toISOString())}</b>
           <button className="chip" aria-label="Earlier" onClick={() => move(i, -1)} style={{ height: 26, padding: '0 6px' }}><Icon name="chevron-down" size={14} /></button></div>)}</div>
         <ErrorLine error={a.error} />
@@ -427,7 +460,7 @@ export function BatchDispatch() {
 // ── o10 · Live deliveries ──
 export function Live() {
   const { mess } = useOwnerMess();
-  const batches = useLoad(() => mess ? rows<Batch & { batch_stops: { seq: number; reached_at: string | null; sections: { code: string; lat: number | null; lng: number | null } | null }[] }>(db().from('batches').select('*,batch_stops(seq,reached_at,sections(code,lat,lng))').eq('mess_id', mess.id).eq('service_date', today()).neq('state', 'cancelled').order('code')) : Promise.resolve([]), [mess?.id], ['batches', 'batch_stops']);
+  const batches = useLoad(() => mess ? rows<Batch & { batch_stops: { seq: number; reached_at: string | null; sections: { code: string; lat: number | null; lng: number | null } | null; orders: { code: string; to_lat: number | null; to_lng: number | null } | null }[] }>(db().from('batches').select('*,batch_stops(seq,reached_at,sections(code,lat,lng),orders(code,to_lat,to_lng))').eq('mess_id', mess.id).eq('service_date', today()).neq('state', 'cancelled').order('code')) : Promise.resolve([]), [mess?.id], ['batches', 'batch_stops']);
   const k = useKitchen(mess?.id);
   // (23-11-2026, picture N5) the Google map: each van on the road where its driver's phone last said, its stops left, the mess
   const roadIds = (batches.data || []).filter((b) => b.state === 'on_the_way').map((b) => b.id);
@@ -445,7 +478,7 @@ export function Live() {
           const marks: Mark[] = [];
           onRoad.forEach((b) => {
             const last = (vans.data || []).find((x) => x.batch_id === b.id);
-            (b.batch_stops || []).filter((x) => !x.reached_at).forEach((x) => { const q = x.sections && pt(x.sections.lat, x.sections.lng); if (q) marks.push({ ...q, kind: 'stop', label: x.sections!.code, title: b.code + ' · ' + x.sections!.code }); });
+            (b.batch_stops || []).filter((x) => !x.reached_at).forEach((x) => { const q = x.sections ? pt(x.sections.lat, x.sections.lng) : x.orders ? pt(x.orders.to_lat, x.orders.to_lng) : null; const nm = x.sections?.code || 'Location'; if (q) marks.push({ ...q, kind: 'stop', label: nm, title: b.code + ' · ' + nm }); });
             if (last) marks.push({ lat: Number(last.lat), lng: Number(last.lng), kind: 'van', label: b.code.slice(-3), title: b.code });
           });
           return <GMap marks={marks.length ? [...(messPt ? [{ ...messPt, kind: 'mess', title: mess.name } as Mark] : []), ...marks] : []} height="100%" label="Map: the vans on the road" fallback={null} />;
@@ -463,7 +496,7 @@ export function Live() {
             {st.length > 0 && <div className="row" style={{ gap: 4 }}>{st.map((x) => <i key={x.seq} style={{ flex: 1, height: 6, borderRadius: 3, background: x.reached_at ? 'var(--leaf)' : '#E7E1D3' }} />)}</div>}
           </Link>;
         })}
-        {short.map(({ o, l }) => <div key={l.id} className="row sm" style={{ background: 'var(--redS)', color: '#8B1A1A', borderRadius: 14, padding: '10px 12px', gap: 8 }}><Icon name="package-x" size={16} /><span className="sp">{o.section?.code} · {o.code}: {l.person} got {l.short_qty} {l.item.toLowerCase()} less</span></div>)}
+        {short.map(({ o, l }) => <div key={l.id} className="row sm" style={{ background: 'var(--redS)', color: '#8B1A1A', borderRadius: 14, padding: '10px 12px', gap: 8 }}><Icon name="package-x" size={16} /><span className="sp">{where(o)} · {o.code}: {l.person} got {l.short_qty} {l.item.toLowerCase()} less</span></div>)}
       </div>
       <Tabs tabs={OWNER_TABS} label="Mess owner" />
     </Screen>
@@ -528,7 +561,7 @@ export function GuestMeals() {
         </div>
         {g.length === 0 ? <Empty icon="users" title="No guest orders today" /> : g.map((o) => <Link key={o.id} to={'/owner/requests/' + o.id} className="card" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8, textDecoration: 'none', color: 'inherit' }}>
           <div className="row"><div className="av plum">{initials(o.lines[0]?.person)}</div><div className="sp"><b style={{ fontSize: 15 }}>{o.lines[0]?.person}</b><div className="xs">asked by {o.requester}</div></div><span className="tag">{o.code}</span></div>
-          <div className="row sm" style={{ gap: 8 }}><Icon name={o.kind === 'meal' ? 'utensils' : 'package'} size={16} /><span className="sp">{mealName(o.meal)} {o.kind === 'meal' ? 'at the mess' : 'parcel'}{o.section ? ' · ' + o.section.code : ''}</span><span className={'chip ' + (o.state === 'delivered' ? 'leaf' : 'amber')} style={{ height: 24 }}>{o.state}</span></div>
+          <div className="row sm" style={{ gap: 8 }}><Icon name={o.kind === 'meal' ? 'utensils' : 'package'} size={16} /><span className="sp">{mealName(o.meal)} {o.kind === 'meal' ? 'at the mess' : 'parcel'}{where(o) ? ' · ' + where(o) : ''}</span><span className={'chip ' + (o.state === 'delivered' ? 'leaf' : 'amber')} style={{ height: 24 }}>{o.state}</span></div>
         </Link>)}
       </Body>
     </Screen>

@@ -71,7 +71,7 @@ export function SaveFoot({ onCancel, onSave, busy, disabled, word = 'Save change
     <button type="button" className="wbtn pri" onClick={onSave} disabled={busy || disabled}><Icon name="check" size={16} />{busy ? 'Saving…' : word}</button></>;
 }
 
-export type RemoveKind = 'site' | 'circle' | 'section' | 'mess' | 'contractor' | 'paper' | 'meal_time' | 'rate' | 'penalty' | 'work_order';
+export type RemoveKind = 'site' | 'section' | 'mess' | 'contractor' | 'paper' | 'meal_time' | 'rate' | 'penalty' | 'work_order';
 
 // The Remove box (M4): from which date (today or later), the reason – what happens, said before it is done.
 export function RemoveBox({ kind, id, name, sub, noDate, word = 'Remove', onClose, onDone }: {
@@ -113,9 +113,9 @@ export function RemoveBox({ kind, id, name, sub, noDate, word = 'Remove', onClos
 
 // ── History (M8) ──
 type Line = { at: string; who: string | null; action: string; before: Record<string, unknown> | null; after: Record<string, unknown> | null; how: string | null; reason: string | null };
-const SKIP = new Set(['id', 'company_id', 'created_at', 'updated_at', 'set_at', 'asked_at', 'decided_at', 'removed_at', 'removed_by', 'verified_at', 'asked_by', 'decided_by', 'verified_by', 'set_by', 'created_by']);
+const SKIP = new Set(['id', 'company_id', 'created_at', 'updated_at', 'set_at', 'asked_at', 'decided_at', 'removed_at', 'removed_by', 'verified_at', 'asked_by', 'decided_by', 'verified_by', 'set_by', 'created_by', 'circle_id']);   // (0017) no circle is shown
 const WORD: Record<string, string> = {
-  name: 'Name', code: 'Code', site_id: 'Site', circle_id: 'Circle', contractor_id: 'Contractor', counters: 'Counters with QR', lat: 'Latitude', lng: 'Longitude',
+  name: 'Name', code: 'Code', site_id: 'Site', contractor_id: 'Contractor', counters: 'Counters with QR', lat: 'Latitude', lng: 'Longitude',
   radius_m: 'Metres around it', valid_from: 'From', valid_to: 'Till', removed_reason: 'Removed – why', active: 'Active', km: 'Km', km_from: 'Km from', km_to: 'Km to',
   place: 'Drop point', serve_from: 'Served from', serve_to: 'Served till', order_by: 'Parcel order by', change_minutes: 'Change window (min)', meal: 'Meal',
   kind: 'Type', contact_name: 'Contact', contact_mobile: 'Mobile', gstin: 'GSTIN', pan: 'PAN', udyam: 'Udyam', address: 'Address', login_code: 'Sign-in code',

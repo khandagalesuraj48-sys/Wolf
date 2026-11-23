@@ -1,15 +1,12 @@
-// The road as the designs draw it (boards e05, e09, o08, o10, d05, w01, w02): the corridor by chainage, its circles, the sections
-// as pins, the van between its stops. Drawn from FALCON's own data (km of each section) – no outside map is needed. A live street
+// The road as the designs draw it (boards e05, e09, o08, o10, d05, w01, w02): the corridor by chainage, the sections as pins, the
+// van between its stops (0017: only sections – no circle). Drawn from FALCON's own data (km of each section) – no outside map is needed. A live street
 // map (Google Maps) comes when its key is set (docs/DECISIONS.md 4).
-export interface MapSection { id: string; code: string; km: number | null; circle?: string | null }
-export interface MapCircle { code: string; km_from: number | null; km_to: number | null }
+export interface MapSection { id: string; code: string; km: number | null }
 
-const COLORS = ['#2F7A45', '#1E63D6', '#C2560E', '#7B3FD0', '#B07A1E'];
-
-export function RoadMap({ sections, circles = [], mine, van, done = [], height = 240, dark = false, label }: {
-  sections: MapSection[]; circles?: MapCircle[]; mine?: string | null; van?: number | null; done?: string[]; height?: number; dark?: boolean; label: string;
+export function RoadMap({ sections, mine, van, done = [], height = 240, dark = false, label }: {
+  sections: MapSection[]; mine?: string | null; van?: number | null; done?: string[]; height?: number; dark?: boolean; label: string;
 }) {
-  const kms = [...sections.map((s) => s.km ?? 0), ...circles.flatMap((c) => [c.km_from ?? 0, c.km_to ?? 0])];
+  const kms = sections.map((s) => s.km ?? 0);
   const lo = Math.min(0, ...kms), hi = Math.max(1, ...kms);
   const W = 400, H = 240;
   const x = (km: number) => 24 + ((km - lo) / (hi - lo || 1)) * (W - 48);
@@ -26,10 +23,6 @@ export function RoadMap({ sections, circles = [], mine, van, done = [], height =
       <rect width={W} height={H} fill="url(#g)" />
       <path d={path(lo, hi)} stroke={edge} strokeWidth="18" fill="none" strokeLinecap="round" />
       <path d={path(lo, hi)} stroke={road} strokeWidth="12" fill="none" strokeLinecap="round" />
-      {circles.map((c, i) => c.km_from != null && c.km_to != null &&
-        <path key={c.code} d={path(c.km_from, c.km_to)} stroke={COLORS[i % COLORS.length]} strokeOpacity=".55" strokeWidth="4" fill="none" />)}
-      {circles.map((c, i) => c.km_from != null && c.km_to != null &&
-        <text key={'t' + c.code} x={x((c.km_from + c.km_to) / 2)} y={y((c.km_from + c.km_to) / 2) + 34} textAnchor="middle" fontSize="10" fontWeight="600" fill={COLORS[i % COLORS.length]}>Circle {c.code}</text>)}
       {sections.filter((s) => s.km != null).map((s) => {
         const on = s.id === mine, d = done.includes(s.id);
         return (

@@ -120,6 +120,20 @@ Every decision here is the owner's. The newest wins. Nothing is built that is no
   the sections, the first Km 0): a section's Km is worked out from the places – the sections with a place in the order of their
   circle and code (A1, A2 … B1 …), the first Km 0, each next one the straight-line distance from the one before; a circle's Km
   from–to from its sections (`site_km`). Nobody types a Km any more.
+* **Only Sections – no circle; a section finds its people by their location** (23-11-2026 – "circle and section he 2 kay ahet" →
+  "nahi as nko ekach thew only section ok samaj Majiwada he section aahe tya section madhe jewde lok fetch krel system te tyat ale circle
+  chi garaj nahi watat section che baheun koni kel asel tr driver aso owner aso je koni aso te location direction he sagle hot jail";
+  "OK he banaw"; part 0017):
+  * a **section is a place with its area**: its point and the metres around it (Sites and sections → Edit). No circle is asked or
+    shown anywhere; the circles of before stay in the database untouched. The Km: the sections in the order of their codes, the
+    first Km 0 (as before, without the circle).
+  * a **van order finds its section by itself**: the phone's location → the section whose metres hold it (the nearest when two do,
+    `section_at`). Chosen by hand ("Change") still works; without the location: his work place, or he chooses.
+  * **from outside every section** – anybody (an employee, a driver, a mess owner, a guest) – the order **carries his location**
+    (only that order keeps it – `orders.to_lat / to_lng`): the kitchen sees it with how far it is from the mess and Google's
+    directions; it is a stop of the van of its own; the driver gets the place and the directions and marks it reached.
+  * the van's stops: the sections and the locations, **the nearest to the mess first** (the kitchen may change the order, as before).
+  * somebody else's location is never shown to another person (his van shows only "Location").
 
 ## Not decided yet – asked before that part is built
 1. **Portal side of the one sign-in** – 23-11-2026: FALCON is joined to HR instead (above); the Portal's module stays unbuilt: adding the module `falcon` in the Portal (Super Admin → Modules) and what its ticket

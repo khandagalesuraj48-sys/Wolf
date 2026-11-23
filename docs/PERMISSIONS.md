@@ -17,7 +17,7 @@ guard. A person sees only his **company** and the **sites** he was given. Board 
 | **Site Admin** | `w01` | `w01`–`w07`, `w11`, `w12`, `w14`–`w17` for his site | sections, mess, menu times; documents; registrations (verify, link, ask HR, temporary, section, reject, suspend, ask details); first approval of a bill; penalty decision | everything of his site | other sites; payment release |
 | **Accounts** | `w10` | `w05`, `w06`, `w08`–`w11`, `w15` | GST / TDS settings with dates (the CA's check); check a bill and its deductions; reconciliation; approve / send back / hold with reason; enter the payment (UTR) | bills, rates, work orders, documents, payments of his sites | change a verified meal count; approve his own entry |
 | **Management** | `w01` (all sites) | `w01`, `w10`–`w14` | approve a payment; send back / hold with reason | every site's figures, scorecards, complaints | change entries |
-| **System Admin** | `w01` | all web pages + users, roles, settings | sites, circles, sections; mess and contractor masters; work orders and rates (with Accounts); roles and who has them; settings (windows, cut-off times, weights) | everything of his company; the audit log | delete history; approve a bill alone; change a payment |
+| **System Admin** | `w01` | all web pages + users, roles, settings | sites and sections (each with its place and metres); mess and contractor masters; work orders and rates (with Accounts); roles and who has them; settings (windows, cut-off times, weights) | everything of his company; the audit log | delete history; approve a bill alone; change a payment |
 
 Nobody approves his own entry; each step of a bill is a different person. Send back, Hold, Reject, Suspend and every correction
 need the reason.

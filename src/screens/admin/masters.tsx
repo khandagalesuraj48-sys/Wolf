@@ -1,10 +1,11 @@
-// The web's masters: w02 sites, circles, sections · w03 mess (times, who may eat, QR codes) · w04 contractor (bank apart) ·
+// The web's masters: w02 sites, sections · w03 mess (times, who may eat, QR codes) · w04 contractor (bank apart) ·
 // w05 documents · w06 work orders, rates with dates, penalties. Every save goes through the table's own rule (RLS) or a function.
 // (23-11-2026, his words: "pratek gost edit delet fromdate as sagle asaw proper"; pictures M1–M8 approved) EVERY record has Edit ·
 // History · Remove and its From / Till: Remove asks from which date and the reason (office_remove – it stays in the record);
 // a dated version (meal times, rates, penalties) is edited from a date or corrected from its start (office_meal_times,
 // office_rate_edit, office_penalty); the Km of a section comes by itself from its place (site_km – his word: "KM mi kuthe taknar
-// nahi … auto km").
+// nahi … auto km"). (0017, his word: "ekach thew only section") a site's places are its SECTIONS only – each with its place and
+// the metres around it (an order inside them finds the section by itself); no circle is asked or shown.
 import { useState } from 'react';
 import QRCode from 'qrcode';
 import { supabase } from '../../lib/supabase';
@@ -63,40 +64,34 @@ function PlaceFields({ lat, lng, onChange, metres, onMetres }: { lat: string; ln
   );
 }
 
-// ── w02 · Sites, circles, sections ──
+// ── w02 · Sites and sections ──
 interface SiteRow extends Dated { id: string; code: string; name: string; removed_reason?: string | null }
-interface Circle extends Dated { id: string; site_id: string; code: string; name: string; km_from: number | null; km_to: number | null; removed_reason?: string | null }
-interface Sec extends Dated { id: string; site_id: string; circle_id: string; code: string; name: string; km: number | null; place: string | null; lat: number | null; lng: number | null; removed_reason?: string | null }
+interface Sec extends Dated { id: string; site_id: string; code: string; name: string; km: number | null; place: string | null; lat: number | null; lng: number | null; radius_m: number | null; removed_reason?: string | null }
 
 export function Sites() {
   const s = useSession();
   const sysadm = s.has('system_admin');
   const [site, setSite] = useState(s.sites[0]?.id || '');
   const sites = useLoad(() => sysadm ? rows<SiteRow>(db().from('sites').select('id,code,name,' + DATED).order('code')) : Promise.resolve([] as SiteRow[]), [sysadm]);
-  const circles = useLoad(() => site ? rows<Circle>(db().from('circles').select('*').eq('site_id', site).order('code')) : Promise.resolve([] as Circle[]), [site]);
   const secs = useLoad(() => site ? rows<Sec>(db().from('sections').select('*').eq('site_id', site).order('code')) : Promise.resolve([] as Sec[]), [site]);
-  const [showC, setShowC] = useState<Shown>('active');
   const [showS, setShowS] = useState<Shown>('active');
   const [edSite, setEdSite] = useState<SiteRow | 'new' | null>(null);
-  const [edCircle, setEdCircle] = useState<Circle | 'new' | null>(null);
   const [edSec, setEdSec] = useState<Sec | 'new' | null>(null);
   const [hist, setHist] = useState<Hist>(null);
   const [rem, setRem] = useState<Rem>(null);
-  const reload = () => { sites.reload(); circles.reload(); secs.reload(); };
+  const reload = () => { sites.reload(); secs.reload(); };
   const canSec = s.has(['system_admin', 'site_admin'], site);
-  const cm = new Map((circles.data || []).map((y) => [y.id, y]));
-  const ord = (list: Sec[]) => [...list].sort((a, b) => nat(cm.get(a.circle_id)?.code || '', cm.get(b.circle_id)?.code || '') || nat(a.code, b.code));
+  const ord = (list: Sec[]) => [...list].sort((a, b) => nat(a.code, b.code));
   const live = ord((secs.data || []).filter((x) => inUse(x)));
   const shownSecs = ord(shownOf(secs.data || [], showS));
   const siteName = (sites.data || []).find((x) => x.id === site)?.code || s.sites.find((x) => x.id === site)?.code || '';
-  const names: Record<string, string> = Object.fromEntries([...(circles.data || []).map((c) => [c.id, 'Circle ' + c.code]), ...s.sites.map((x) => [x.id, x.code])]);
+  const names: Record<string, string> = Object.fromEntries(s.sites.map((x) => [x.id, x.code]));
   return (
     <Web title="Sites and sections" roles={['system_admin', 'site_admin']} actions={<>
       <SitePick value={site} onChange={setSite} />
-      {sysadm && <button className="wbtn" onClick={() => setEdCircle('new')} disabled={!site}><Icon name="plus" size={16} />New circle</button>}
       {canSec && <button className="wbtn pri" onClick={() => setEdSec('new')} disabled={!site}><Icon name="plus" size={16} />New section</button>}</>}>
       <div className="g2" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.15fr)' }}>
-        <div className="wcard" style={{ padding: 0, overflow: 'hidden' }}><GMap height={320} label="Map: the site's sections" fallback={<RoadMap sections={live.map((y) => ({ id: y.id, code: y.code, km: y.km, circle: cm.get(y.circle_id)?.code }))} circles={(circles.data || []).filter((c) => inUse(c)).map((y) => ({ code: y.code, km_from: y.km_from, km_to: y.km_to }))} height={320} label="The site's road with its circles and sections" />}
+        <div className="wcard" style={{ padding: 0, overflow: 'hidden' }}><GMap height={320} label="Map: the site's sections" fallback={<RoadMap sections={live.map((y) => ({ id: y.id, code: y.code, km: y.km }))} height={320} label="The site's road with its sections" />}
           marks={live.map((y) => { const q = pt(y.lat, y.lng); return q ? { ...q, kind: 'stop', label: y.code, title: y.name } as Mark : null; }).filter(Boolean) as Mark[]} /></div>
         {sysadm ? <div className="wcard tight"><div className="row" style={{ marginBottom: 10 }}><h3 className="sp" style={{ margin: 0 }}>Sites</h3><span className="tag">System Admin</span>
           <button className="wbtn" style={{ height: 34 }} onClick={() => setEdSite('new')}><Icon name="plus" size={14} />New site</button></div>
@@ -104,27 +99,18 @@ export function Sites() {
             rows={(sites.data || []).map((x) => [<b>{x.code}</b>, x.name, day(x.valid_from), <StateChip r={x} />,
               <Acts onEdit={stateOf(x) === 'removed' ? undefined : () => setEdSite(x)} onHistory={() => setHist({ entity: 'sites', id: x.id, name: x.code })}
                 onRemove={listed(x) && !x.removed_at ? () => setRem({ kind: 'site', id: x.id, name: x.code, sub: x.name }) : undefined} />])} />}
-        </div> : <div className="wcard"><h3>How the Km comes</h3><div className="sm">Give each section its place on the map. The Km comes by itself: the sections in the order of their circle and code (A1, A2 … B1 …), the first Km 0, each next one the distance from the one before.</div></div>}
-      </div>
-      <div className="wcard"><div className="row wrap" style={{ marginBottom: 10, gap: 10 }}><h3 className="sp" style={{ margin: 0 }}>Circles · {siteName}</h3><ShowPick list={circles.data || []} value={showC} onChange={setShowC} /></div>
-        {circles.error ? <Failed error={circles.error} retry={circles.reload} /> : <Tbl head={['Circle', 'Name', 'Km', 'Sections', 'From', 'Status', '']} right={[3, 6]} empty="No circle yet"
-          rows={shownOf(circles.data || [], showC).sort((a, b) => nat(a.code, b.code)).map((c) => [<b>{c.code}</b>, c.name,
-            c.km_from != null ? c.km_from + (c.km_to != null ? ' – ' + c.km_to : '') : '–', live.filter((y) => y.circle_id === c.id).length, day(c.valid_from), <StateChip r={c} />,
-            <Acts onEdit={sysadm && stateOf(c) !== 'removed' ? () => setEdCircle(c) : undefined} onHistory={() => setHist({ entity: 'circles', id: c.id, name: 'Circle ' + c.code })}
-              onRemove={sysadm && listed(c) && !c.removed_at ? () => setRem({ kind: 'circle', id: c.id, name: 'Circle ' + c.code, sub: c.name }) : undefined} />])} />}
+        </div> : <div className="wcard"><h3>A section is a place</h3><div className="sm">Give each section its place on the map and the metres around it. An order from inside those metres finds the section by itself; an order from outside every section brings its location – the kitchen and the driver get it with the directions. The Km comes by itself: the sections in the order of their codes (A1, A2 … B1 …), the first Km 0.</div></div>}
       </div>
       <div className="wcard"><div className="row wrap" style={{ marginBottom: 10, gap: 10 }}><h3 className="sp" style={{ margin: 0 }}>Sections · {siteName}</h3><ShowPick list={secs.data || []} value={showS} onChange={setShowS} /></div>
         {secs.loading && !secs.data ? <Loading /> : secs.error ? <Failed error={secs.error} retry={secs.reload} /> :
-          <Tbl head={['Section', 'Circle', 'Km', 'Drop point', 'Place on the map', 'From', 'Status', '']} right={[7]} empty="No section yet" hl={(i) => { const y = shownSecs[i]; return !!y && listed(y) && y.lat == null; }}
-            rows={shownSecs.map((y) => [<b>{y.code}</b>, cm.get(y.circle_id)?.code || '–', y.km ?? '–', y.place || '–', placeText(y.lat, y.lng) || <NotSet />, day(y.valid_from), <StateChip r={y} />,
+          <Tbl head={['Section', 'Name', 'Km', 'Drop point', 'Place and metres', 'From', 'Status', '']} right={[7]} empty="No section yet" hl={(i) => { const y = shownSecs[i]; return !!y && listed(y) && (y.lat == null || y.radius_m == null); }}
+            rows={shownSecs.map((y) => [<b>{y.code}</b>, y.name, y.km ?? '–', y.place || '–', y.lat != null && y.radius_m != null ? placeText(y.lat, y.lng, y.radius_m) : <NotSet />, day(y.valid_from), <StateChip r={y} />,
               <Acts onEdit={canSec && stateOf(y) !== 'removed' ? () => setEdSec(y) : undefined} onHistory={() => setHist({ entity: 'sections', id: y.id, name: 'Section ' + y.code })}
                 onRemove={canSec && listed(y) && !y.removed_at ? () => setRem({ kind: 'section', id: y.id, name: 'Section ' + y.code, sub: y.name }) : undefined} />])} />}
-        <div className="row xs" style={{ marginTop: 12, gap: 8, alignItems: 'flex-start' }}><Icon name="info" size={14} /><span className="sp">The Km comes by itself from the places: in the order of the circle and the code, the first section Km 0. Remove asks from which date and the reason; orders and deliveries before it stay as they are. A person's section comes from his registration.</span></div>
+        <div className="row xs" style={{ marginTop: 12, gap: 8, alignItems: 'flex-start' }}><Icon name="info" size={14} /><span className="sp">A van order from inside a section's metres goes to that section by itself; from outside every section it carries the person's location. A section without its place and metres is only chosen by hand. The Km comes by itself, in the order of the codes. Remove asks from which date and the reason; orders and deliveries before it stay as they are.</span></div>
       </div>
       {edSite && <SiteForm row={edSite === 'new' ? null : edSite} onClose={() => setEdSite(null)} onSaved={async () => { setEdSite(null); reload(); await s.refresh(); }} />}
-      {edCircle && <CircleForm site={site} row={edCircle === 'new' ? null : edCircle} onClose={() => setEdCircle(null)} onSaved={() => { setEdCircle(null); reload(); }} />}
-      {edSec && <SectionForm site={site} circles={(circles.data || []).filter((c) => inUse(c) || (edSec !== 'new' && c.id === edSec.circle_id))} row={edSec === 'new' ? null : edSec}
-        onClose={() => setEdSec(null)} onSaved={() => { setEdSec(null); reload(); }} />}
+      {edSec && <SectionForm site={site} row={edSec === 'new' ? null : edSec} onClose={() => setEdSec(null)} onSaved={() => { setEdSec(null); reload(); }} />}
       {hist && <HistoryBox {...hist} names={names} onClose={() => setHist(null)} />}
       {rem && <RemoveBox {...rem} onClose={() => setRem(null)} onDone={async () => { setRem(null); reload(); if (rem.kind === 'site') await s.refresh(); }} />}
     </Web>
@@ -153,50 +139,29 @@ function SiteForm({ row, onClose, onSaved }: { row: SiteRow | null; onClose: () 
   );
 }
 
-function CircleForm({ site, row, onClose, onSaved }: { site: string; row: Circle | null; onClose: () => void; onSaved: () => void }) {
-  const [f, setF] = useState({ code: row?.code || '', name: row?.name || '', from: row?.valid_from || (row ? '' : today()), why: '' });
+function SectionForm({ site, row, onClose, onSaved }: { site: string; row: Sec | null; onClose: () => void; onSaved: () => void }) {
+  const [f, setF] = useState({ code: row?.code || '', name: row?.name || '', place: row?.place || '', lat: row?.lat != null ? String(row.lat) : '', lng: row?.lng != null ? String(row.lng) : '',
+    metres: row?.radius_m != null ? String(row.radius_m) : '', from: row?.valid_from || (row ? '' : today()), why: '' });
   const a = useAct();
   const go = () => a.run(async () => {
-    await save('circles', { ...(row ? { id: row.id } : { site_id: site }), code: f.code.trim().toUpperCase(), name: f.name.trim() || 'Circle ' + f.code.trim().toUpperCase(), valid_from: val(f.from) });
-    if (row && f.why.trim()) await call('office_note', { p_entity: 'circles', p_id: row.id, p_reason: f.why });
-    onSaved();
-  });
-  return (
-    <Drawer title={row ? 'Edit · Circle ' + row.code : 'New circle'} onClose={onClose} foot={<SaveFoot onCancel={onClose} onSave={go} busy={a.busy} disabled={!f.code.trim()} word={row ? 'Save changes' : 'Add circle'} />}>
-      <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
-        <WField label="Code" style={{ flex: 'none', width: 120 }}><input className="winp" value={f.code} maxLength={12} onChange={(e) => setF({ ...f, code: e.target.value.toUpperCase() })} placeholder="A" /></WField>
-        <WField label="Name"><input className="winp" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Circle A" /></WField>
-      </div>
-      <div className="xs">Its Km from–to comes by itself from its sections' places.</div>
-      <WField label="In use from"><input className="winp" type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></WField>
-      {row && <WField label="Why (kept in History)"><input className="winp" value={f.why} onChange={(e) => setF({ ...f, why: e.target.value })} placeholder="Optional" /></WField>}
-      <ErrorLine error={a.error} />
-    </Drawer>
-  );
-}
-
-function SectionForm({ site, circles, row, onClose, onSaved }: { site: string; circles: Circle[]; row: Sec | null; onClose: () => void; onSaved: () => void }) {
-  const [f, setF] = useState({ circle: row?.circle_id || '', code: row?.code || '', name: row?.name || '', place: row?.place || '', lat: row?.lat != null ? String(row.lat) : '', lng: row?.lng != null ? String(row.lng) : '',
-    from: row?.valid_from || (row ? '' : today()), why: '' });
-  const a = useAct();
-  const go = () => a.run(async () => {
-    const p = place(f.lat, f.lng);
-    await save('sections', { ...(row ? { id: row.id } : { site_id: site }), circle_id: f.circle, code: f.code.trim().toUpperCase(), name: f.name.trim() || f.code.trim().toUpperCase(),
-      place: val(f.place), lat: p.lat, lng: p.lng, valid_from: val(f.from) });
+    const p = place(f.lat, f.lng), metres = Number(f.metres);
+    if (p.lat != null && (f.metres.trim() === '' || !Number.isInteger(metres) || metres < 10 || metres > 5000)) throw new Error('Metres around the section: 10 to 5000.');
+    await save('sections', { ...(row ? { id: row.id } : { site_id: site }), code: f.code.trim().toUpperCase(), name: f.name.trim() || f.code.trim().toUpperCase(),
+      place: val(f.place), lat: p.lat, lng: p.lng, radius_m: p.lat == null ? null : metres, valid_from: val(f.from) });
     if (row && f.why.trim()) await call('office_note', { p_entity: 'sections', p_id: row.id, p_reason: f.why });
     onSaved();
   });
   return (
     <Drawer title={row ? 'Edit · Section ' + row.code : 'New section'} sub={row?.km != null ? 'Km ' + row.km + ' – it comes by itself from the places' : 'The Km comes by itself from the places'} onClose={onClose}
-      foot={<SaveFoot onCancel={onClose} onSave={go} busy={a.busy} disabled={!f.circle || !f.code.trim()} word={row ? 'Save changes' : 'Add section'} />}>
+      foot={<SaveFoot onCancel={onClose} onSave={go} busy={a.busy} disabled={!f.code.trim()} word={row ? 'Save changes' : 'Add section'} />}>
       <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
-        <WField label="Circle"><select className="winp" value={f.circle} onChange={(e) => setF({ ...f, circle: e.target.value })}><option value="">Choose</option>{circles.map((c) => <option key={c.id} value={c.id}>Circle {c.code}</option>)}</select></WField>
-        <WField label="Code"><input className="winp" value={f.code} maxLength={12} onChange={(e) => setF({ ...f, code: e.target.value.toUpperCase() })} placeholder="A1" /></WField>
+        <WField label="Code" style={{ flex: 'none', width: 140 }}><input className="winp" value={f.code} maxLength={12} onChange={(e) => setF({ ...f, code: e.target.value.toUpperCase() })} placeholder="A1" /></WField>
+        <WField label="Name"><input className="winp" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="e.g. Majiwada" /></WField>
       </div>
-      <WField label="Name"><input className="winp" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Section A1" /></WField>
       <WField label="Drop point"><input className="winp" value={f.place} onChange={(e) => setF({ ...f, place: e.target.value })} placeholder="e.g. site office" /></WField>
-      <div className="hr" /><b style={{ fontSize: 14 }}>Place on the map</b>
-      <PlaceFields lat={f.lat} lng={f.lng} onChange={(lat, lng) => setF({ ...f, lat, lng })} />
+      <div className="hr" /><b style={{ fontSize: 14 }}>Place on the map and the metres around it</b>
+      <PlaceFields lat={f.lat} lng={f.lng} onChange={(lat, lng) => setF({ ...f, lat, lng })} metres={f.metres} onMetres={(v) => setF({ ...f, metres: v })} />
+      <div className="xs">A van order from inside these metres goes to this section by itself. Outside every section, the order brings the person's location.</div>
       <div className="hr" />
       <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
         <WField label="In use from"><input className="winp" type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></WField>

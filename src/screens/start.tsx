@@ -28,7 +28,7 @@ const setFlow = (f: Flow) => { flowMem = { ...flow(), ...f }; try { const { phot
 const phoneE164 = (ten: string) => '+91' + ten.replace(/\D/g, '').slice(-10);
 const tenOk = (ten: string) => /^[6-9]\d{9}$/.test(ten.replace(/\D/g, '').slice(-10));
 
-interface Places { company: string; name: string; sites: { id: string; code: string; name: string; sections: { id: string; code: string; name: string; circle: string }[] }[] }
+interface Places { company: string; name: string; sites: { id: string; code: string; name: string; sections: { id: string; code: string; name: string }[] }[] }
 function usePlaces() {
   return useLoad<Places | null>(() => call<Places | null>('start_places', { p_company: doorCompany() }), []);
 }
@@ -141,17 +141,17 @@ export function Found() {
           <Row k="Category" v={f.hr.category} />
           <Row k="Site" v={site ? site.code + ' · ' + site.name : f.hr.site} />
           <div className="row" style={{ padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
-            <span className="sm sp">Circle · section</span>
+            <span className="sm sp">Section</span>
             {site && site.sections.length ? (
-              <select value={section} onChange={(e) => setSection(e.target.value)} aria-label="Circle and section" style={{ border: 0, background: 'transparent', font: 'inherit', fontSize: 14, fontWeight: 600, color: 'var(--leafD)' }}>
+              <select value={section} onChange={(e) => setSection(e.target.value)} aria-label="Section" style={{ border: 0, background: 'transparent', font: 'inherit', fontSize: 14, fontWeight: 600, color: 'var(--leafD)' }}>
                 <option value="">Pick</option>
-                {site.sections.map((x) => <option key={x.id} value={x.id}>{x.circle} · {x.code}</option>)}
+                {site.sections.map((x) => <option key={x.id} value={x.id}>{x.code}{x.name && x.name !== x.code ? ' – ' + x.name : ''}</option>)}
               </select>
             ) : <span className="chip amber" style={{ height: 26 }}>Not in HR</span>}
           </div>
           <Row k="WhatsApp" v={f.hr.mobile_masked} last />
         </div>
-        <div className="row xs" style={{ gap: 8 }}><Icon name="info" size={14} /><span className="sp">Locked details come from HR. Your pick of circle is checked by the Site Admin.</span></div>
+        <div className="row xs" style={{ gap: 8 }}><Icon name="info" size={14} /><span className="sp">Locked details come from HR. Your pick of section is checked by the Site Admin.</span></div>
         <div className="row sm" style={{ gap: 8, color: 'var(--muted)' }}><Icon name="message-circle" size={16} /><span className="sp">Something wrong? Tell HR – they correct it</span></div>
         <ErrorLine error={a.error} />
       </Body>
@@ -260,7 +260,7 @@ export function Done() {
           <b style={{ fontSize: 15 }}>You can now</b>
           <div className="row sm"><Icon name="utensils" size={16} /><span className="sp">Take meals at your site's mess</span></div>
           <div className="row sm"><Icon name="package" size={16} /><span className="sp">Ask for parcels to your section</span></div>
-          {!sec && reg.data && <div className="row sm"><Icon name="clock-alert" size={16} /><span className="sp">Your circle and section wait for the Site Admin's OK</span></div>}
+          {!sec && reg.data && <div className="row sm"><Icon name="clock-alert" size={16} /><span className="sp">Your section waits for the Site Admin's OK</span></div>}
         </div>
         <span className="sp" />
         <Btn kind="leaf" to="/" style={{ marginBottom: 26 }}>Open FALCON</Btn>
@@ -335,7 +335,7 @@ export function NewReg() {
           <div className="row wrap" style={{ gap: 6 }}>{CATS.map(([v, l]) => <button key={v} className={'chip' + (form.category === v ? ' on' : '')} onClick={() => set('category')(v)}>{l}</button>)}</div></div>
         <div className="row" style={{ gap: 10, alignItems: 'stretch' }}>
           <div style={{ flex: 1 }}><Field label="Site"><select className="inp" value={site} onChange={(e) => { setSite(e.target.value); setSection(''); }} style={{ height: 46, font: 'inherit' }}><option value="">Choose</option>{places.data?.sites.map((x) => <option key={x.id} value={x.id}>{x.code}</option>)}</select></Field></div>
-          <div style={{ flex: 1 }}><Field label="Circle · section"><select className="inp" value={section} onChange={(e) => setSection(e.target.value)} style={{ height: 46, font: 'inherit' }}><option value="">Choose</option>{st?.sections.map((x) => <option key={x.id} value={x.id}>{x.circle} · {x.code}</option>)}</select></Field></div>
+          <div style={{ flex: 1 }}><Field label="Section"><select className="inp" value={section} onChange={(e) => setSection(e.target.value)} style={{ height: 46, font: 'inherit' }}><option value="">Choose</option>{st?.sections.map((x) => <option key={x.id} value={x.id}>{x.code}{x.name && x.name !== x.code ? ' – ' + x.name : ''}</option>)}</select></Field></div>
         </div>
         <Field label="Contractor / subcontractor (if not on the company's roll)"><Input value={form.works_with!} onChange={set('works_with')} placeholder="optional" /></Field>
         <label className="row" style={{ gap: 12, alignItems: 'center', cursor: 'pointer' }}>

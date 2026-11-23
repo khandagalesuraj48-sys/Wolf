@@ -32,8 +32,7 @@ const TABLES = {
   people: [person], role_grants: grants, sites: [{ id: ID(10), code: 'S1', name: 'Test site', active: true }], companies: [{ id: ID(90), code: 'TST', name: 'Test Company' }],
   messes: [{ id: ID(30), name: 'Test Mess', site_id: ID(10), contractor_id: ID(40), counters: 2, active: true, lat: null, lng: null, radius_m: null, contractors: { name: 'Test Caterers' } }],
   contractors: [{ id: ID(40), name: 'Test Caterers', kind: 'proprietor', contact_name: 'Made Up', contact_mobile: '+910000000040', gstin: null, pan: null, udyam: null, address: null, active: true, login_code: null }],
-  circles: [{ id: ID(50), site_id: ID(10), code: 'A', name: 'Circle A', km_from: 0, km_to: 10 }],
-  sections: [{ id: ID(20), site_id: ID(10), circle_id: ID(50), code: 'A1', name: 'A1', km: 2.4, place: 'office', lat: null, lng: null, active: true }],
+  sections: [{ id: ID(20), site_id: ID(10), code: 'A1', name: 'A1', km: 2.4, place: 'office', lat: null, lng: null, radius_m: null, active: true }],
   items: [{ id: ID(60), code: 'lunch', name: 'Lunch', kind: 'meal', meal: 'lunch', unit: 'plate', active: true }],
   work_orders: [{ id: ID(80), number: 'WO-T-1', site_id: ID(10), mess_id: ID(30), contractor_id: ID(40), valid_from: '2026-04-01', valid_to: '2027-03-31', payment_days: 30, advance_amount: 0, advance_recovery_pct: 0, security_deposit: 0, retention_pct: 5, state: 'active', messes: { name: 'Test Mess' }, contractors: { name: 'Test Caterers' } }],
   rates: [{ id: ID(81), item_id: ID(60), rate: 95, valid_from: '2026-04-01', valid_to: null, state: 'approved', asked_by: null, reason: null, items: { name: 'Lunch', code: 'lunch' } }],
@@ -96,6 +95,7 @@ const ROUTES = ['/', '/start', '/start/employee', '/start/contractor', '/start/r
 
   // (23-11-2026) where he is, the server's clock, opened from HR (pictures N1, N2, N8) – the mess gets a place for this part
   Object.assign(TABLES.messes[0], { lat: 18.52, lng: 73.85, radius_m: 100 });
+  Object.assign(TABLES.sections[0], { lat: 18.53, lng: 73.85, radius_m: 500 });   // (0017) Section A1: its place and 500 m around it
   TABLES.meal_windows = ['breakfast|07:30|09:30|07:00', 'lunch|12:00|14:30|11:30', 'dinner|19:30|22:00|19:00'].map((x, i) => {
     const [meal, f, t, o] = x.split('|');
     return { id: ID(170 + i), mess_id: ID(30), meal, serve_from: f + ':00', serve_to: t + ':00', order_by: o + ':00', change_minutes: 30, valid_from: '2026-01-01', valid_to: null };
@@ -105,6 +105,10 @@ const ROUTES = ['/', '/start', '/start/employee', '/start/contractor', '/start/r
     { name: 'at the mess, 13:00 by the server', geo: { latitude: 18.5201, longitude: 73.8501 }, clock: at('13:00'), want: ['You are at Test Mess', 'Lunch at the mess', 'Scan the counter QR', 'Inside the mess area'] },
     { name: 'away (3.3 km), 18:00 by the server', geo: { latitude: 18.55, longitude: 73.85 }, clock: at('18:00'), want: ['km from Test Mess', 'Dinner parcel to your section', 'Ask dinner parcel', 'Directions'] },
     { name: 'location off', geo: null, clock: at('13:00'), want: ['Location is off', 'Scan QR', 'Parcel'] },
+    // (0017, his word: "only section … section che baheun koni kel asel tr … location direction") the van goes where he is
+    { name: 'parcel inside Section A1', path: '/app/parcel', geo: { latitude: 18.531, longitude: 73.85 }, clock: at('13:00'), want: ['found by your location', 'Section A1'] },
+    { name: 'parcel outside every section', path: '/app/parcel', geo: { latitude: 18.60, longitude: 73.85 }, clock: at('13:00'), want: ['outside the sections', 'Your location', 'km from the mess', 'Your location goes with this order only'] },
+    { name: 'parcel, location off', path: '/app/parcel', geo: null, clock: at('13:00'), want: ['your work place', 'Section A1'] },
     { name: 'opened from HR (#hrpass)', geo: { latitude: 18.5201, longitude: 73.8501 }, clock: at('13:00'), hash: '#hrpass=made-up-pass', want: ['Signed in through RCL HR', 'Present since 08:52', 'Comes from HR by itself'] },
   ];
   for (const c of CASES) {
@@ -117,7 +121,7 @@ const ROUTES = ['/', '/start', '/start/employee', '/start/contractor', '/start/r
     const page = await cx.newPage();
     const errs = [];
     page.on('pageerror', (e) => errs.push('pageerror: ' + e.message));
-    await page.goto('http://127.0.0.1:4179/app' + (c.hash || ''), { waitUntil: 'networkidle', timeout: 20000 }).catch((e) => errs.push('goto: ' + e.message));
+    await page.goto('http://127.0.0.1:4179' + (c.path || '/app') + (c.hash || ''), { waitUntil: 'networkidle', timeout: 20000 }).catch((e) => errs.push('goto: ' + e.message));
     await page.waitForTimeout(1200);
     const text = (await page.evaluate(() => document.body.innerText).catch(() => '')).replace(/\s+/g, ' ');
     const missing = c.want.filter((w) => !text.includes(w));
@@ -132,7 +136,7 @@ const ROUTES = ['/', '/start', '/start/employee', '/start/contractor', '/start/r
     { name: 'mess – Remove', path: '/admin/mess', click: [['button', 'Remove']], want: ['Remove Test Mess?', 'From which date', 'Reason (must be given)', 'It stays in the record'] },
     { name: 'mess – History', path: '/admin/mess', click: [['button', 'History']], want: ['History · Test Mess', 'Nothing changed yet.'] },
     { name: 'meal times – Edit', path: '/admin/mess', click: [['button', 'Edit', 2]], want: ['Edit · Lunch · Test Mess', 'Which days get the new times?', 'From a date', 'Correct it from its start'] },
-    { name: 'section – Edit', path: '/admin/sites', click: [['button', 'Edit', -1]], want: ['Edit · Section A1', 'The Km comes by itself', 'Latitude'] },
+    { name: 'section – Edit', path: '/admin/sites', click: [['button', 'Edit', -1]], want: ['Edit · Section A1', 'The Km comes by itself', 'Latitude', 'the metres around it', 'Metres'] },
     { name: 'contractors', path: '/admin/mess', click: [['tab', 'Contractors']], want: ['New contractor', 'Papers', 'Sign-in code'] },
     { name: 'rate – Edit', path: '/admin/work-orders', click: [['button', 'Edit', 2]], want: ['Edit · Lunch rate', 'Rate ₹', 'Not in a bill yet'] },
   ];
