@@ -171,7 +171,26 @@ export function PeopleRoles() {
   const give = () => a.run(async () => { await call('grant_role', { p_person: p!.id, p_role: g.role, p_site: g.every ? null : site, p_mess: ['mess_owner', 'mess_operator'].includes(g.role) ? g.mess : null, p_from: g.from, p_to: g.to || null }); grants.reload(); });
   const take = (id: string) => a.run(async () => { if (!why.trim()) throw new Error('Write the reason first.'); await call('revoke_role', { p_grant: id, p_reason: why }); setWhy(''); grants.reload(); });
   const group = () => a.run(async () => { await call('allow_group', { p_person: p!.id, p_allow: !p!.may_group }); people.reload(); });
-  const addP = () => a.run(async () => { const id = await call<string>('add_contractor_person', { p_full_name: np.name, p_mobile: '+91' + np.mobile.replace(/\D/g, '').slice(-10), p_site: site, p_work_role: np.work || null }); setNp({ name: '', mobile: '', work: '' }); people.reload(); setSel(id); });
+  // (23-11-2026, his picture: "duplicate key value violates unique constraint people_company_id_mobile_key") a mobile that is already a
+  // person of FALCON is never added twice: he is found and opened – on his own site – and the page says who he is; the role is given there
+  const addP = () => a.run(async () => {
+    const mobile = '+91' + np.mobile.replace(/\D/g, '').slice(-10);
+    const { data: have } = await db().from('people').select('id,full_name,kind,home_site_id,state').eq('mobile', mobile).limit(1);
+    const h = (have || [])[0] as { id: string; full_name: string; kind: string; home_site_id: string | null; state: string } | undefined;
+    if (h) {
+      const at = s.sites.find((x) => x.id === h.home_site_id);
+      if (at) { setSite(at.id); setFind(''); setSel(h.id); }
+      throw new Error('This mobile is already in FALCON: ' + h.full_name + ' (' + h.kind.replace(/_/g, ' ') + (at ? ', ' + at.code : '') + ', ' + h.state + ')' +
+        (at ? ' – opened on the right: give him his role there.' : ' – he is not on a site you see; the System Admin gives his role.'));
+    }
+    try {
+      const id = await call<string>('add_contractor_person', { p_full_name: np.name, p_mobile: mobile, p_site: site, p_work_role: np.work || null });
+      setNp({ name: '', mobile: '', work: '' }); people.reload(); setSel(id);
+    } catch (e) {
+      if (/people_company_id_mobile_key/.test(String((e as Error)?.message || e))) throw new Error('This mobile is already with another person in FALCON (one you do not see) – the System Admin finds him in People and gives the role.');
+      throw e;
+    }
+  });
   const addV = () => a.run(async () => { const { error } = await db().from('vehicles').insert({ company_id: s.me!.company_id, site_id: site, reg_no: nv.reg.toUpperCase(), kind: nv.kind, capacity: nv.cap ? Number(nv.cap) : null }); if (error) throw new Error(error.message); setNv({ reg: '', kind: 'Van', cap: '' }); vans.reload(); });
   const siteCode = (id: string | null) => (id ? s.sites.find((x) => x.id === id)?.code : 'every site');
   return (
