@@ -7,7 +7,7 @@
 //                                          "Mess" card. Nothing of a person.
 import crypto from 'node:crypto';
 import { handler, body, Fail } from './_lib/http.js';
-import { env, companyCode } from './_lib/env.js';
+import { env, companyCode, supabaseUrl } from './_lib/env.js';
 import { service, publicClient, rpc } from './_lib/supa.js';
 import { readPass, hrEmail, istNow, mealNow } from './_lib/hrpass.js';
 
@@ -24,12 +24,20 @@ async function card(req, site) {
   const code = String(site || '').trim().toUpperCase();
   if (!/^[A-Z0-9-]{1,16}$/.test(code)) throw new Fail(400, 'Which site?', 'site');
   const sb = service(), { day, hm } = istNow();
+  // (23-11-2026, his picture: "FALCON has no company RCL yet" while RCL is in the database) a database that cannot be read says
+  // so with its own words and WHICH database was asked – never "no company"
+  const where = (() => { try { return new URL(supabaseUrl()).host; } catch { return '?'; } })();
+  const dbFail = (what, e) => new Fail(503, 'FALCON could not read its ' + what + ' in the database ' + where + ': ' + String((e && (e.code ? e.code + ' ' : '') + (e.message || '')) || 'no answer').slice(0, 200) +
+    ' – check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in FALCON\'s Vercel.', 'db');
   const co = await sb.from('companies').select('id').eq('code', companyCode()).maybeSingle();
-  if (co.error || !co.data) throw new Fail(503, 'FALCON has no company ' + companyCode() + ' yet.', 'settings');
+  if (co.error) throw dbFail('companies', co.error);
+  if (!co.data) throw new Fail(503, 'FALCON has no company ' + companyCode() + ' in the database ' + where + ' (FALCON_COMPANY_CODE in Vercel).', 'settings');
   const s = await sb.from('sites').select('id,code,name').eq('company_id', co.data.id).eq('code', code).maybeSingle();
+  if (s.error) throw dbFail('sites', s.error);
   if (!s.data) return { ok: true, now: new Date().toISOString(), site: code, messes: [] };
   // (23-11-2026) only the messes in use today (From / Till); a removed meal-time version is out
   const ms0 = await sb.from('messes').select('id,name,lat,lng,radius_m,valid_from,valid_to').eq('site_id', s.data.id).eq('active', true).order('name');
+  if (ms0.error) throw dbFail('messes', ms0.error);
   const ms = { data: (ms0.data || []).filter((x) => (!x.valid_from || x.valid_from <= day) && (!x.valid_to || x.valid_to >= day)) };
   const ids = ms.data.map((x) => x.id);
   const [wins, menus] = ids.length ? await Promise.all([
