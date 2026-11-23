@@ -30,7 +30,10 @@ create or replace function storage.foldername(name text) returns text[] language
 grant all on storage.objects to authenticated, service_role;
 grant select on storage.buckets to authenticated, service_role;
 -- Supabase gives the API roles everything in public by default; RLS is what guards. Copy that, so the tests prove RLS.
-alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges in schema public grant all on tables to anon, authenticated;
+-- (0018, his project of 23-11-2026) the server role gets NO reading of a new table by itself – only REFERENCES, TRIGGER, TRUNCATE –
+-- exactly as his Supabase does; so a table the server reads must be granted on purpose (and a test shows it)
+alter default privileges in schema public grant references, trigger, truncate on tables to service_role;
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 create publication supabase_realtime;

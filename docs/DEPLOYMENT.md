@@ -140,6 +140,13 @@ Nothing to set and no SQL step – merging the web update and the FALCON app's i
 3. **An order's page** reads only that order's confirmations (it read every confirmation the person may see – more every day).
 4. **Live screens:** many changes at once (a batch confirmed, the van's points) load the screen once, not once each.
 
+## 11 · The Mess card in HR / the ERP app (23-11-2026, his picture: "42501 permission denied for table companies")
+
+His Supabase gives FALCON's server role (`service_role`) no reading of a table by itself (his check: only REFERENCES, TRIGGER,
+TRUNCATE). The Mess card HR asks for is the one place the server reads tables directly. **Run once:**
+`supabase/updates/2026-11-23g_server_reads.sql` (part 0018) – it lets the server READ the company, the site, the messes, the meal
+times and today's menu; nothing else, nothing is written or deleted. Then, in the ERP / HR app, tap the Mess line – it asks again.
+
 ## Going back
 
 * The page and the server: Vercel → Deployments → the previous one → **Instant Rollback**.
