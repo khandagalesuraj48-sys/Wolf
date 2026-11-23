@@ -109,6 +109,17 @@ Every decision here is the owner's. The newest wins. Nothing is built that is no
   Home has a "Mess" card, the ERP app's Home a "Mess" strip under "Mark IN"; a tap opens FALCON signed in with a pass HR's server
   signs (2 minutes, once; RCL ID, name, mobile, site, designation, today's first punch-in) – no company code, no WhatsApp code.
   FALCON's own sign-in (company code → employee code → WhatsApp code) stays for everybody else.
+* **Edit · History · Remove and From date on every record of the masters** (23-11-2026 – "pratek gost edit delet fromdate as sagle
+  asaw proper"; pictures M1–M8 approved: "sagle ek sath banwayla ghe"; his answers: every master page; a removal leaves the list and
+  stays in the record): sites, circles, sections, messes, contractors, papers, meal times, work orders, rates, penalties and the BOQ.
+  Remove asks from which date (today or later) and the reason; the orders, days and bills before stay as they are; the "Removed"
+  list and History show who, when and why. A dated version (meal times, rates, penalties) is edited **from a date** (the days before
+  keep the old one) or **corrected from its start** (a typing mistake); an approved rate already in a bill is never corrected – a
+  new rate from a later date waits for Accounts. History of every record: who, when, before → after, why (`office_history`).
+* **The Km comes by itself** (23-11-2026 – "KM mi kuthe taknar nahi apan coordinated denar aahot auto km"; his answer: in the order of
+  the sections, the first Km 0): a section's Km is worked out from the places – the sections with a place in the order of their
+  circle and code (A1, A2 … B1 …), the first Km 0, each next one the straight-line distance from the one before; a circle's Km
+  from–to from its sections (`site_km`). Nobody types a Km any more.
 
 ## Not decided yet – asked before that part is built
 1. **Portal side of the one sign-in** – 23-11-2026: FALCON is joined to HR instead (above); the Portal's module stays unbuilt: adding the module `falcon` in the Portal (Super Admin → Modules) and what its ticket

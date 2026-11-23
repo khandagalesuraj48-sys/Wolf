@@ -28,10 +28,12 @@ async function card(req, site) {
   if (co.error || !co.data) throw new Fail(503, 'FALCON has no company ' + companyCode() + ' yet.', 'settings');
   const s = await sb.from('sites').select('id,code,name').eq('company_id', co.data.id).eq('code', code).maybeSingle();
   if (!s.data) return { ok: true, now: new Date().toISOString(), site: code, messes: [] };
-  const ms = await sb.from('messes').select('id,name,lat,lng,radius_m').eq('site_id', s.data.id).eq('active', true).order('name');
-  const ids = (ms.data || []).map((x) => x.id);
+  // (23-11-2026) only the messes in use today (From / Till); a removed meal-time version is out
+  const ms0 = await sb.from('messes').select('id,name,lat,lng,radius_m,valid_from,valid_to').eq('site_id', s.data.id).eq('active', true).order('name');
+  const ms = { data: (ms0.data || []).filter((x) => (!x.valid_from || x.valid_from <= day) && (!x.valid_to || x.valid_to >= day)) };
+  const ids = ms.data.map((x) => x.id);
   const [wins, menus] = ids.length ? await Promise.all([
-    sb.from('meal_windows').select('mess_id,meal,serve_from,serve_to,order_by').in('mess_id', ids).lte('valid_from', day).or('valid_to.is.null,valid_to.gte.' + day),
+    sb.from('meal_windows').select('mess_id,meal,serve_from,serve_to,order_by').in('mess_id', ids).is('removed_at', null).lte('valid_from', day).or('valid_to.is.null,valid_to.gte.' + day),
     sb.from('menus').select('mess_id,meal,dishes').in('mess_id', ids).eq('service_date', day),
   ]) : [{ data: [] }, { data: [] }];
   return {

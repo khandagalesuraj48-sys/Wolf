@@ -108,6 +108,15 @@ piece of work.
    WhatsApp code); a new employee of HR is made in FALCON as HR says (code, name, mobile, site, designation). A person stopped in
    FALCON stays stopped. The phone's location is read only while the mess home is open and is never saved or sent.
 
+## 8 · The masters: Edit, Remove, From date; the Km by itself (decision of 23-11-2026; pictures M1–M8)
+
+1. **The database first:** run `supabase/updates/2026-11-23e_masters.sql` (part 0016) once – BEFORE merging the web update (the new
+   pages read the new columns; the web of before keeps working with them). It deletes nothing; the only rows it changes are the Km of
+   the sections that have a place (worked out from the places) and the Km from–to of their circles.
+2. **Then merge the web update** (and the FALCON app's: a removed mess / section / site leaves the phone's lists from its date).
+3. **What it changes:** every row of Sites and sections, Mess and contractors, Work orders and rates has Edit · History · Remove;
+   Remove asks the date and the reason and the record stays ("Removed" list, History). Nothing is ever wiped out.
+
 ## Going back
 
 * The page and the server: Vercel → Deployments → the previous one → **Instant Rollback**.

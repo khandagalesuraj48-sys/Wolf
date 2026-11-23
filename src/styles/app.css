@@ -37,3 +37,33 @@ body { font-family: 'Schibsted Grotesk', system-ui, -apple-system, 'Segoe UI', R
   .web .main { padding: 16px 16px 40px; }
 }
 @media print { .web .side, .wtop .wbtn, .tabs { display: none !important; } .web .main { padding: 0; } }
+
+/* (23-11-2026, pictures M1–M8) the masters: Edit · History · Remove on every row, the side panel, the Remove box, the History. */
+.sb { height: 32px; border-radius: 10px; border: 1px solid #DDE2EA; background: #fff; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px;
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--ink); text-decoration: none; white-space: nowrap; cursor: pointer; }
+.sb.del { color: #B42318; }
+.sb.ok { background: var(--leaf); border-color: var(--leaf); color: #fff; }
+.sb:disabled { opacity: .5; cursor: default; }
+.act { display: flex; gap: 6px; justify-content: flex-end; }
+.chip.st { height: 26px; font-size: 12.5px; }
+button.chip { cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; }
+.tbl tr.gone td { color: var(--faint); }
+.tbl td.wrap { white-space: normal; min-width: 180px; }
+.mdim { position: fixed; inset: 0; background: rgba(14,27,51,.42); z-index: 40; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(480px, 100%); background: #fff; box-shadow: -16px 0 40px rgba(14,27,51,.18);
+  display: flex; flex-direction: column; z-index: 41; }
+.drawer .dh { display: flex; align-items: center; gap: 10px; padding: 20px 22px; border-bottom: 1px solid #E4E8EE; }
+.drawer .db { display: flex; flex-direction: column; gap: 14px; padding: 18px 22px; overflow: auto; flex: 1; }
+.drawer .df { display: flex; align-items: center; gap: 10px; padding: 16px 22px; border-top: 1px solid #E4E8EE; }
+.mbox { position: fixed; left: 50%; top: 10vh; transform: translateX(-50%); width: min(540px, calc(100% - 32px)); max-height: 80vh; overflow: auto; background: #fff;
+  border-radius: 18px; box-shadow: 0 24px 60px rgba(14,27,51,.28); padding: 22px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; z-index: 41; }
+.wfield input.winp, .wfield select.winp, .wfield textarea.winp { font: inherit; font-size: 14px; color: var(--ink); width: 100%; box-sizing: border-box; min-width: 0; }
+.wfield textarea.winp { height: 76px; padding: 10px 12px; resize: vertical; }
+.opt { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border: 1px solid #E4E8EE; border-radius: 12px; cursor: pointer; }
+.opt.on { border-color: var(--leaf); background: #F3F9F4; }
+.ev { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid #F0F2F5; }
+.ev .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--leaf); margin-top: 5px; flex: none; }
+.was { text-decoration: line-through; color: var(--faint); }
+.row > .wfield { flex: 1; }
+.drawer .db > * { flex-shrink: 0; }
+.tight .tbl { min-width: 0; } .tight .tbl td { white-space: normal; }
