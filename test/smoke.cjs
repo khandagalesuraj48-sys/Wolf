@@ -139,8 +139,15 @@ const ROUTES = ['/', '/start', '/start/employee', '/start/contractor', '/start/r
     { name: 'section – Edit', path: '/admin/sites', click: [['button', 'Edit', -1]], want: ['Edit · Section A1', 'The Km comes by itself', 'Latitude', 'the metres around it', 'Metres'] },
     { name: 'contractors', path: '/admin/mess', click: [['tab', 'Contractors']], want: ['New contractor', 'Papers', 'Sign-in code'] },
     { name: 'rate – Edit', path: '/admin/work-orders', click: [['button', 'Edit', 2]], want: ['Edit · Lunch rate', 'Rate ₹', 'Not in a bill yet'] },
+    // (23-11-2026, his word: "work order detana choose mess ekl ki name nahi yet") every mess is listed – one without its contractor gets him here
+    { name: 'work order – New, a mess without its contractor', path: '/admin/work-orders', click: [['button', 'New work order']],
+      extra: { id: ID(31), name: 'Camp Mess', site_id: ID(10), contractor_id: null, counters: 1, active: true, valid_from: null, valid_to: null, removed_at: null, lat: null, lng: null, radius_m: null },
+      pick: ['Mess', ID(31)], options: ['Test Mess · S1 · Test Caterers', 'Camp Mess · S1 · no contractor yet'],
+      want: ['New work order', 'Contractor of this mess', 'Camp Mess has no contractor yet: the one you choose is set on the mess too'] },
+    { name: 'mess – the Contractors tab by its address', path: '/admin/mess?tab=contractors', click: [], want: ['New contractor', 'Sign-in code'] },
   ];
   for (const c of MCASES) {
+    if (c.extra) TABLES.messes.push(c.extra);
     const page = await ctx.newPage();
     const errs = [];
     page.on('pageerror', (e) => errs.push('pageerror: ' + e.message));
@@ -154,6 +161,15 @@ const ROUTES = ['/', '/start', '/start/employee', '/start/contractor', '/start/r
       await all.nth(i).click().catch((e) => errs.push('click: ' + e.message));
       await page.waitForTimeout(500);
     }
+    let opts = [];
+    if (c.pick) {
+      const sel = page.locator('label.wfield').filter({ has: page.locator('span', { hasText: new RegExp('^' + c.pick[0] + '$') }) }).locator('select').first();
+      opts = await sel.evaluate((el) => Array.from(el.options, (o) => o.textContent.replace(/\s+/g, ' ').trim())).catch((e) => { errs.push('options: ' + e.message); return []; });
+      await sel.selectOption(c.pick[1]).catch((e) => errs.push('pick: ' + e.message));
+      await page.waitForTimeout(400);
+    }
+    for (const o of c.options || []) if (!opts.includes(o)) errs.push('no choice "' + o + '" (there are: ' + opts.join(' | ') + ')');
+    if (c.extra) TABLES.messes.pop();
     const text = (await page.evaluate(() => document.body.innerText).catch(() => '')).replace(/\s+/g, ' ');
     const missing = c.want.filter((w) => !text.includes(w));
     if (process.env.SMOKE_SHOTS) await page.screenshot({ path: path.join(process.env.SMOKE_SHOTS, 'masters_' + c.name.replace(/[^a-z0-9]+/gi, '_') + '.png') });

@@ -557,13 +557,15 @@ function useOrder(id: string | undefined) {
   return useLoad(async () => {
     const o = await one<Order>(db().from('orders').select('*').eq('id', id!).limit(1));
     if (!o) return null;
-    const [lines, code, mess, sec, conf] = await Promise.all([
+    const [lines, code, mess, sec] = await Promise.all([
       rows<Line>(db().from('order_lines').select('*,items(name,code)').eq('order_id', o.id)),
       one<{ code: string; used_at: string | null }>(db().from('delivery_codes').select('code,used_at').eq('order_id', o.id).limit(1)),
       one<{ name: string }>(db().from('messes').select('name').eq('id', o.mess_id).limit(1)),
       o.to_section_id ? one<{ code: string; km: number | null; place: string | null }>(db().from('sections').select('code,km,place').eq('id', o.to_section_id).limit(1)) : Promise.resolve(null),
-      rows<{ order_line_id: string; kind: string; qty_received: number | null; at: string }>(db().from('confirmations').select('order_line_id,kind,qty_received,at')),
     ]);
+    // (23-11-2026, "falcon khup slow") only THIS order's confirmations – not every confirmation the person may read
+    const ids = lines.map((l) => l.id);
+    const conf = ids.length ? await rows<{ order_line_id: string; kind: string; qty_received: number | null; at: string }>(db().from('confirmations').select('order_line_id,kind,qty_received,at').in('order_line_id', ids)) : [];
     return { o, lines, code, mess, sec, conf };
   }, [id], ['orders', 'order_lines']);
 }

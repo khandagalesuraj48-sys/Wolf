@@ -62,10 +62,13 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[], watch: string[
   }, [...deps, tick]);
   useEffect(() => {
     if (!supabase || watch.length === 0) return;
+    // (23-11-2026, "falcon khup slow") many changes at once (a batch confirmed, the van's points) load the screen ONCE, not once each
+    let wait: ReturnType<typeof setTimeout> | null = null;
+    const soon = () => { if (!wait) wait = setTimeout(() => { wait = null; reload(); }, 700); };
     const ch = supabase.channel('watch-' + watch.join('-') + '-' + Math.random().toString(36).slice(2));
-    for (const t of watch) ch.on('postgres_changes', { event: '*', schema: 'public', table: t }, () => reload());
+    for (const t of watch) ch.on('postgres_changes', { event: '*', schema: 'public', table: t }, soon);
     ch.subscribe();
-    return () => { void supabase!.removeChannel(ch); };
+    return () => { if (wait) clearTimeout(wait); void supabase!.removeChannel(ch); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watch.join(',')]);
   return { ...state, reload };

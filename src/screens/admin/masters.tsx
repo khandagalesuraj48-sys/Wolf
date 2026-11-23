@@ -7,6 +7,7 @@
 // nahi … auto km"). (0017, his word: "ekach thew only section") a site's places are its SECTIONS only – each with its place and
 // the metres around it (an order inside them finds the section by itself); no circle is asked or shown.
 import { useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { supabase } from '../../lib/supabase';
 import { call, db, one, rows, useAct, useLoad } from '../../lib/db';
@@ -177,7 +178,8 @@ interface Mess extends Dated { id: string; name: string; site_id: string; contra
 interface Con extends Dated { id: string; name: string; kind: string; contact_name: string | null; contact_mobile: string | null; gstin: string | null; pan: string | null; udyam: string | null; address: string | null; login_code: string | null; removed_reason?: string | null }
 
 export function Messes() {
-  const [tab, setTab] = useState<'messes' | 'contractors'>('messes');
+  const [q] = useSearchParams();
+  const [tab, setTab] = useState<'messes' | 'contractors'>(q.get('tab') === 'contractors' ? 'contractors' : 'messes');
   return (
     <Web title="Mess and contractors" roles={['system_admin', 'site_admin', 'accounts']}>
       <div className="row wrap" style={{ gap: 8 }} role="tablist">
@@ -237,7 +239,7 @@ function MessList() {
       </div>
       {m && <MealTimes mess={m} can={can(m) && listed(m)} onHistory={setHist} onRemove={setRem} />}
       <div className="row xs" style={{ gap: 8 }}><Icon name="shield-check" size={14} /><span className="sp">Every save and every removal is kept in History – who, when, before → after and the reason. Nothing is wiped out.</span></div>
-      {ed && <MessForm row={ed === 'new' ? null : ed} cons={(cons.data || []).filter((c) => inUse(c) || (ed !== 'new' && c.id === ed.contractor_id))} onClose={() => setEd(null)} onSaved={() => { setEd(null); list.reload(); }} />}
+      {ed && <MessForm row={ed === 'new' ? null : ed} cons={(cons.data || []).filter((c) => listed(c) || (ed !== 'new' && c.id === ed.contractor_id))} onClose={() => setEd(null)} onSaved={() => { setEd(null); list.reload(); }} />}
       {hist && <HistoryBox {...hist} names={names} onClose={() => setHist(null)} />}
       {rem && <RemoveBox {...rem} onClose={() => setRem(null)} onDone={() => { setRem(null); list.reload(); }} />}
     </>
@@ -670,8 +672,18 @@ export function WorkOrders() {
 function WoForm({ row, onClose, onSaved }: { row: WO | null; onClose: () => void; onSaved: () => void }) {
   const s = useSession();
   const messes = useLoad(() => rows<Mess>(db().from('messes').select('id,name,site_id,contractor_id,' + DATED).order('name')), []);
-  const [f, setF] = useState({ number: row?.number || '', mess: row?.mess_id || '', from: row?.valid_from || '', to: row?.valid_to || '', days: String(row?.payment_days ?? 30), adv: String(row?.advance_amount ?? 0),
+  const cons = useLoad(() => row ? Promise.resolve([] as Con[]) : rows<Con>(db().from('contractors').select('id,name,' + DATED).order('name')), []);
+  const [f, setF] = useState({ number: row?.number || '', mess: row?.mess_id || '', con: '', from: row?.valid_from || '', to: row?.valid_to || '', days: String(row?.payment_days ?? 30), adv: String(row?.advance_amount ?? 0),
     advp: String(row?.advance_recovery_pct ?? 0), sd: String(row?.security_deposit ?? 0), ret: String(row?.retention_pct ?? 5), state: row?.state || 'active', why: '' });
+  // (23-11-2026, his word: "mess add keliye but work order detana choose mess ekl ki name nahi yet") EVERY mess in use or coming is
+  // listed – with its site and its contractor; a mess without its contractor gets him here (set on the mess too, kept in History)
+  const siteCode = (id: string) => s.sites.find((x) => x.id === id)?.code || '';
+  const conName = (id: string | null) => (cons.data || []).find((c) => c.id === id)?.name || '';
+  const choice = (messes.data || []).filter((m) => listed(m));
+  const cm = choice.find((m) => m.id === f.mess);
+  const needCon = !row && !!cm && !cm.contractor_id;
+  const mayMess = !!cm && s.has(['system_admin', 'site_admin'], cm.site_id);
+  const liveCons = (cons.data || []).filter((c) => listed(c));
   const a = useAct();
   const go = () => a.run(async () => {
     const n = (x: string, what: string) => { const v = Number(x.replace(/,/g, '')); if (!Number.isFinite(v) || v < 0) throw new Error(what + ': a number, 0 or more.'); return v; };
@@ -681,21 +693,36 @@ function WoForm({ row, onClose, onSaved }: { row: WO | null; onClose: () => void
       await save('work_orders', { id: row.id, ...terms });
       if (f.why.trim()) await call('office_note', { p_entity: 'work_orders', p_id: row.id, p_reason: f.why });
     } else {
-      const m = (messes.data || []).find((x) => x.id === f.mess);
-      if (!m || !m.contractor_id) throw new Error('Choose a mess that has its contractor.');
-      await save('work_orders', { company_id: s.me!.company_id, site_id: m.site_id, mess_id: m.id, contractor_id: m.contractor_id, created_by: s.me!.id, ...terms });
+      const m = choice.find((x) => x.id === f.mess);
+      if (!m) throw new Error('Choose the mess.');
+      let con = m.contractor_id;
+      if (!con) {
+        if (!f.con) throw new Error('Choose the contractor of this mess.');
+        await save('messes', { id: m.id, contractor_id: f.con });
+        con = f.con;
+      }
+      await save('work_orders', { company_id: s.me!.company_id, site_id: m.site_id, mess_id: m.id, contractor_id: con, created_by: s.me!.id, ...terms });
     }
     onSaved();
   });
   const t = (k: 'number' | 'days' | 'adv' | 'advp' | 'sd' | 'ret' | 'why', label: string, mode: 'numeric' | 'text' = 'numeric') =>
     <WField label={label}><input className="winp" value={f[k]} inputMode={mode} onChange={(e) => setF({ ...f, [k]: e.target.value })} /></WField>;
   return (
-    <Drawer title={row ? 'Edit · ' + row.number : 'New work order'} onClose={onClose} foot={<SaveFoot onCancel={onClose} onSave={go} busy={a.busy} disabled={!f.number.trim() || (!row && !f.mess) || !f.from || !f.to} word={row ? 'Save changes' : 'Add work order'} />}>
+    <Drawer title={row ? 'Edit · ' + row.number : 'New work order'} onClose={onClose} foot={<SaveFoot onCancel={onClose} onSave={go} busy={a.busy} disabled={!f.number.trim() || (!row && !f.mess) || (needCon && (!mayMess || !f.con)) || !f.from || !f.to} word={row ? 'Save changes' : 'Add work order'} />}>
       <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
         {t('number', 'Number', 'text')}
         <WField label="State"><select className="winp" value={f.state} onChange={(e) => setF({ ...f, state: e.target.value })}><option value="draft">Draft</option><option value="active">Active</option></select></WField>
       </div>
-      {!row && <WField label="Mess"><select className="winp" value={f.mess} onChange={(e) => setF({ ...f, mess: e.target.value })}><option value="">Choose</option>{(messes.data || []).filter((m) => m.contractor_id && inUse(m)).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></WField>}
+      {!row && <WField label="Mess"><select className="winp" value={f.mess} onChange={(e) => setF({ ...f, mess: e.target.value, con: '' })} disabled={messes.loading && !messes.data}>
+        <option value="">{messes.loading && !messes.data ? 'Loading…' : choice.length ? 'Choose' : 'No mess yet'}</option>
+        {choice.map((m) => <option key={m.id} value={m.id}>{m.name} · {siteCode(m.site_id)} · {m.contractor_id ? conName(m.contractor_id) || 'contractor set' : 'no contractor yet'}{stateOf(m) === 'coming' ? ' · from ' + day(m.valid_from!) : ''}</option>)}</select></WField>}
+      {!row && messes.data && !choice.length && <div className="row sm" style={{ gap: 8, alignItems: 'flex-start' }}><Icon name="info" size={16} /><span className="sp">No mess in use yet – add it first in <Link to="/admin/mess">Mess and contractors</Link>.</span></div>}
+      {messes.error && <Failed error={messes.error} retry={messes.reload} />}
+      {needCon && mayMess && liveCons.length > 0 && <>
+        <WField label="Contractor of this mess"><select className="winp" value={f.con} onChange={(e) => setF({ ...f, con: e.target.value })}><option value="">Choose</option>{liveCons.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></WField>
+        <div className="row xs" style={{ gap: 8, alignItems: 'flex-start' }}><Icon name="info" size={14} /><span className="sp">{cm!.name} has no contractor yet: the one you choose is set on the mess too (kept in its History) and the work order is his.</span></div></>}
+      {needCon && mayMess && cons.data && !liveCons.length && <div className="row sm" style={{ gap: 8, alignItems: 'flex-start' }}><Icon name="info" size={16} /><span className="sp">No contractor yet – add him first in <Link to="/admin/mess?tab=contractors">Mess and contractors → Contractors</Link>.</span></div>}
+      {needCon && !mayMess && <div className="row sm" style={{ gap: 8, alignItems: 'flex-start' }}><Icon name="info" size={16} /><span className="sp">{cm!.name} has no contractor yet. The Site Admin of {siteCode(cm!.site_id)} or the System Admin gives it: <Link to="/admin/mess">Mess and contractors</Link> → Edit the mess.</span></div>}
       <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
         <WField label="From"><input className="winp" type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></WField>
         <WField label="Till"><input className="winp" type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></WField>
