@@ -49,6 +49,9 @@ const route = async (r) => {
   if (u.pathname.startsWith('/storage/v1/')) return send({});
   const t = u.pathname.replace('/rest/v1/', '');
   if (r.request().method() !== 'GET') return send([]);
+  // (23-11-2026) a look-up by mobile answers only that mobile's rows (the People page checks a mobile before adding a person)
+  const mob = u.searchParams.get('mobile');
+  if (mob && mob.startsWith('eq.')) return send((TABLES[t] || []).filter((x) => x.mobile === mob.slice(3)));
   return send(TABLES[t] || []);
 };
 
@@ -145,6 +148,10 @@ const ROUTES = ['/', '/start', '/start/employee', '/start/contractor', '/start/r
       pick: ['Mess', ID(31)], options: ['Test Mess · S1 · Test Caterers', 'Camp Mess · S1 · no contractor yet'],
       want: ['New work order', 'Contractor of this mess', 'Camp Mess has no contractor yet: the one you choose is set on the mess too'] },
     { name: 'mess – the Contractors tab by its address', path: '/admin/mess?tab=contractors', click: [], want: ['New contractor', 'Sign-in code'] },
+    // (23-11-2026, his picture: "duplicate key value violates unique constraint people_company_id_mobile_key") a mobile already in FALCON:
+    // the page says who has it and opens him – it is never sent to be added twice
+    { name: 'people – a contractor\'s person whose mobile is already there', path: '/admin/people', fill: [['WhatsApp mobile', '0000000000'], ['Full name', 'Made Up']],
+      click: [['button', 'Add']], want: ['This mobile is already in FALCON: Test Person (employee, S1, linked)', 'opened on the right'] },
   ];
   for (const c of MCASES) {
     if (c.extra) TABLES.messes.push(c.extra);
@@ -153,6 +160,7 @@ const ROUTES = ['/', '/start', '/start/employee', '/start/contractor', '/start/r
     page.on('pageerror', (e) => errs.push('pageerror: ' + e.message));
     await page.goto('http://127.0.0.1:4179' + c.path, { waitUntil: 'networkidle', timeout: 20000 }).catch((e) => errs.push('goto: ' + e.message));
     await page.waitForTimeout(400);
+    for (const [ph, v] of c.fill || []) await page.getByPlaceholder(ph, { exact: true }).fill(v).catch((e) => errs.push('fill ' + ph + ': ' + e.message));
     for (const [role, name, nth] of c.click) {
       const all = page.getByRole(role, { name, exact: true });
       const n = await all.count();
