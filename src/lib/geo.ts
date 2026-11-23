@@ -1,6 +1,8 @@
 // Where the person is (23-11-2026, his word: "app swata check krel user kuthe aahe – mess location madhe to asel tr mess ch auto yeil,
 // mess pasun lamb asel tr mess che direction kiti lamb te dakhwel ani auto parcel"). The phone's own location, read only while a
-// screen that needs it is open; it never leaves the phone (nothing of it is saved or sent).
+// screen that needs it is open. It leaves the phone only with a van order (23-11-2026, his word: "only section … section che baheun
+// koni kel asel tr … location direction he sagle hot jail"): the server finds the section whose area holds it, and keeps the point
+// with that order only when it is inside no section – for the kitchen's and the driver's directions. Nothing else of it is sent.
 import { useEffect, useState } from 'react';
 
 export interface Pt { lat: number; lng: number }
@@ -22,7 +24,20 @@ export function atMess(me: Place, mess: { lat: number | null; lng: number | null
   return metres(me, { lat: Number(mess.lat), lng: Number(mess.lng) }) - Math.min(me.acc || 0, 50) <= (mess.radius_m || 100);
 }
 
-// Google Maps' own directions page – opens the Maps app on a phone; no key and nothing of the person is sent but the mess's point.
+// The section whose area holds the point – the nearest when two do; null: inside no section (the server's own rule:
+// public.section_at). A section without its place or its metres is never found by a point.
+export interface Area { id: string; lat: number | null; lng: number | null; radius_m: number | null; code: string }
+export function sectionAt<T extends Area>(me: Pt, secs: T[]): T | null {
+  let best: T | null = null, bd = Infinity;
+  for (const x of secs) {
+    if (x.lat == null || x.lng == null || x.radius_m == null) continue;
+    const d = metres(me, { lat: Number(x.lat), lng: Number(x.lng) });
+    if (d <= x.radius_m && (d < bd || (d === bd && best && x.code < best.code))) { best = x; bd = d; }
+  }
+  return best;
+}
+
+// Google Maps' own directions page – opens the Maps app on a phone; no key and nothing of the person is sent but the point it goes to.
 export const directionsUrl = (p: Pt) => 'https://www.google.com/maps/dir/?api=1&destination=' + p.lat.toFixed(6) + ',' + p.lng.toFixed(6);
 
 export function usePlace(on = true): PlaceState & { ask: () => void } {

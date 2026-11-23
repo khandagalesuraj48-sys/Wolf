@@ -9,7 +9,7 @@
    its code as its name until the System Admin names it. "Present today" is not counted from HR's attendance yet.
 3. **WhatsApp code** needs FALCON's own `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` and the approved template `otp`; without
    them no code is sent (the screen says so).
-4. **Maps:** no Google Maps key – the road is drawn from each section's km (circles, sections, the van's last place on the drawn
+4. **Maps:** no Google Maps key – the road is drawn from each section's km (the sections, the van's last place on the drawn
    road). Route times are **suggested** from the dated settings "van speed" (30 km/h until set) and "minutes a stop" (4).
 5. ~~**The FALCON logo**~~ – logo B is in use since 23-11-2026.
 6. **"Posted in the ERP":** Accounts types the ERP entry's reference; nothing is posted to a ledger automatically.

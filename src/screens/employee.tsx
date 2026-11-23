@@ -7,9 +7,9 @@ import { api, call, db, one, rows, useAct, useLoad } from '../lib/db';
 import { useSession } from '../lib/session';
 import { day, dayLong, firstName, greeting, initials, mealIcon, mealName, MEALS, nowHM, time, today, type Meal } from '../lib/fmt';
 import { Icon } from '../ui/Icon';
-import { RoadMap, type MapCircle, type MapSection } from '../ui/RoadMap';
+import { RoadMap, type MapSection } from '../ui/RoadMap';
 import { GMap, pt, type Mark } from '../ui/GMap';
-import { atMess, directionsUrl, distText, metres, usePlace } from '../lib/geo';
+import { atMess, directionsUrl, distText, metres, sectionAt, usePlace } from '../lib/geo';
 import { closeHrBanner, readHr } from '../lib/hrinfo';
 import { Body, Btn, Denied, Empty, ErrorLine, Failed, Field, Foot, Input, Loading, Screen, Seg, Stepper, Tabs, Top, CodeBoxes } from '../ui/kit';
 import { inUse, type Dated } from '../lib/dated';
@@ -18,9 +18,9 @@ import { inUse, type Dated } from '../lib/dated';
 interface Mess { id: string; name: string; site_id: string; contractor_id: string | null; counters: number | null; lat: number | null; lng: number | null; radius_m: number | null }
 interface Win { meal: Meal; serve_from: string; serve_to: string; order_by: string; change_minutes: number }
 interface Item { id: string; code: string; name: string; kind: string; meal: string | null }
-interface Sec { id: string; code: string; name: string; km: number | null; place: string | null; circle_id: string; lat: number | null; lng: number | null; circles?: { code: string; km_from: number | null; km_to: number | null } }
+interface Sec { id: string; code: string; name: string; km: number | null; place: string | null; lat: number | null; lng: number | null; radius_m: number | null }
 interface Order { id: string; code: string; kind: 'meal' | 'parcel' | 'delivery'; meal: Meal; service_date: string; state: string; created_at: string; accepted_at: string | null;
-  change_until: string | null; ready_at: string | null; to_section_id: string | null; guest_visit_id: string | null; host_state: string; refused_reason: string | null; mess_id: string; requested_by: string; is_group: boolean; note: string | null }
+  change_until: string | null; ready_at: string | null; to_section_id: string | null; to_lat: number | null; to_lng: number | null; guest_visit_id: string | null; host_state: string; refused_reason: string | null; mess_id: string; requested_by: string; is_group: boolean; note: string | null }
 interface Line { id: string; order_id: string; person_id: string; item_id: string; is_meal: boolean; qty: number; state: string; delivered_qty: number | null; short_qty: number | null; items?: { name: string; code: string } }
 
 export const EMP_TABS = [
@@ -64,14 +64,11 @@ function useItems() {
   return useLoad(() => rows<Item>(db().from('items').select('id,code,name,kind,meal').eq('active', true).order('name')), []);
 }
 function useSections(siteId: string | null | undefined) {
-  return useLoad(() => siteId ? rows<Sec & Dated>(db().from('sections').select('id,code,name,km,place,circle_id,lat,lng,active,valid_from,valid_to,circles(code,km_from,km_to)').eq('site_id', siteId).eq('active', true).order('km'))
+  // (0017) only sections – no circle; each with its area (place + metres)
+  return useLoad(() => siteId ? rows<Sec & Dated>(db().from('sections').select('id,code,name,km,place,lat,lng,radius_m,active,valid_from,valid_to').eq('site_id', siteId).eq('active', true).order('km').order('code'))
     .then((x) => x.filter((y) => inUse(y))) : Promise.resolve([] as Sec[]), [siteId]);
 }
-const toMap = (secs: Sec[]) => {
-  const circles = new Map<string, MapCircle>();
-  secs.forEach((s) => s.circles && circles.set(s.circles.code, { code: s.circles.code, km_from: s.circles.km_from, km_to: s.circles.km_to }));
-  return { sections: secs.map((s) => ({ id: s.id, code: s.code, km: s.km, circle: s.circles?.code })) as MapSection[], circles: [...circles.values()].sort((a, b) => a.code.localeCompare(b.code)) };
-};
+const toMap = (secs: Sec[]) => ({ sections: secs.map((s) => ({ id: s.id, code: s.code, km: s.km })) as MapSection[] });
 const pickedSection = () => { try { return sessionStorage.getItem('falcon.section') || ''; } catch { return ''; } };
 
 // ── Main · Mess home ──
@@ -332,6 +329,10 @@ export function useGuestVisit() {
 }
 
 // ── e04 · Parcel ──
+// (0017, his word of 23-11-2026: "only section … section che baheun koni kel asel tr … location direction he sagle hot jail") the van
+// goes where he is: a section chosen by hand first; else the phone's location – the section whose area holds it, or, outside every
+// section, the point itself (the kitchen and the driver get it with the directions); no location: his work place, or he chooses.
+type To = { sec: Sec | null; point: boolean; why: string; asking?: boolean };
 export function Parcel() {
   const s = useSession();
   const nav = useNavigate();
@@ -344,20 +345,31 @@ export function Parcel() {
   const [extra, setExtra] = useState<Record<string, number>>({});
   const [how, setHow] = useState<'delivery' | 'parcel'>('delivery');
   const [note, setNote] = useState('');
+  const here = usePlace(how === 'delivery' && !pickedSection());
   const a = useAct();
   const m: Meal = meal || currentMeal(wins.data || []);
   const w = (wins.data || []).find((x) => x.meal === m);
   const st = winState(w, today(), 'parcel');
-  const secId = pickedSection() || visit.data?.section_id || s.me?.home_section_id || '';
-  const sec = (secs.data || []).find((x) => x.id === secId);
+  const list = secs.data || [];
+  const byHand = list.find((x) => x.id === pickedSection()) || null;
+  const usual = list.find((x) => x.id === (visit.data?.section_id || s.me?.home_section_id)) || null;
+  const found = here.state === 'ok' ? sectionAt(here, list) : null;
+  const to: To = byHand ? { sec: byHand, point: false, why: 'chosen by you' }
+    : here.state === 'ok' ? (found ? { sec: found, point: false, why: 'found by your location' } : { sec: null, point: true, why: 'outside the sections' })
+    : here.state === 'asking' ? { sec: null, point: false, why: '', asking: true }
+    : usual ? { sec: usual, point: false, why: 'your work place' } : { sec: null, point: false, why: '' };
+  const away = to.point && here.state === 'ok' && mess?.lat != null && mess?.lng != null ? metres(here, { lat: Number(mess.lat), lng: Number(mess.lng) }) : null;
   const meals = (items.data || []).find((i) => i.kind === 'meal' && i.meal === m);
   const extras = (items.data || []).filter((i) => i.kind === 'extra');
   const n = Object.values(extra).reduce((x, y) => x + y, 0);
   const ask = () => a.run(async () => {
-    if (how === 'delivery' && !sec) throw new Error('Choose where to deliver.');
+    if (how === 'delivery' && !to.sec && !to.point) throw new Error('Choose where to deliver.');
     const lines = [{ item: meals!.code }, ...Object.entries(extra).filter(([, k]) => k > 0).map(([code, k]) => ({ item: code, qty: k }))];
+    // the location decides on the server (the same rule): his point is sent; a section by hand / his work place: the section
+    const byPoint = how === 'delivery' && !byHand && here.state === 'ok';
     const r = await call<{ order_id: string | null; existing: { order_id: string }[] }>('request_order', { p_mess: mess!.id, p_date: today(), p_meal: m, p_kind: how, p_lines: lines,
-      p_section: how === 'delivery' ? sec!.id : null, p_note: note || null, p_visit: visit.data?.id || null });
+      p_section: how === 'delivery' && !byPoint ? to.sec!.id : null, p_note: note || null, p_visit: visit.data?.id || null,
+      p_lat: byPoint ? Number(here.lat.toFixed(6)) : null, p_lng: byPoint ? Number(here.lng.toFixed(6)) : null });
     nav('/app/orders/' + (r.order_id || r.existing[0]?.order_id));
   });
   if (s.me?.state === 'temporary') return <Screen><Top back={true} title="Parcel" /><Body><Denied text="Your temporary access is for meals at your own site's mess only." /></Body></Screen>;
@@ -368,10 +380,13 @@ export function Parcel() {
         <Seg value="parcel" options={[{ v: 'meal', label: 'At the mess' }, { v: 'parcel', label: 'Parcel to my site' }]} onChange={(v) => v === 'meal' && nav('/app/meal')} />
         <div className="row" style={{ gap: 6 }}>{MEALS.map((x) => <button key={x} className={'chip' + (x === m ? ' on' : '')} onClick={() => setMeal(x)}>{mealName(x)}</button>)}</div>
         {how === 'delivery' && <Link className="card" to="/app/section" style={{ display: 'flex', gap: 12, alignItems: 'center', textDecoration: 'none', color: 'inherit' }}>
-          <div className="tile navy"><Icon name="map-pin" size={22} /></div>
-          <div className="sp"><span className="xs">Deliver to{secId === s.me?.home_section_id ? ' · your work place' : ''}</span><b style={{ display: 'block', fontSize: 15, marginTop: 2 }}>{sec ? 'Circle ' + (sec.circles?.code || '') + ' · Section ' + sec.code : 'Choose the section'}</b><div className="sm">{sec ? (sec.km != null ? 'Km ' + sec.km : '') + (sec.place ? ' · ' + sec.place : '') : ' '}</div></div>
+          <div className={'tile ' + (to.point ? 'blue' : 'navy')}><Icon name={to.point ? 'locate-fixed' : 'map-pin'} size={22} /></div>
+          <div className="sp"><span className="xs">Deliver to{to.why ? ' · ' + to.why : ''}</span>
+            <b style={{ display: 'block', fontSize: 15, marginTop: 2 }}>{to.sec ? 'Section ' + to.sec.code + (to.sec.name && to.sec.name !== to.sec.code ? ' – ' + to.sec.name : '') : to.point ? 'Your location' : to.asking ? 'Finding where you are…' : 'Choose the section'}</b>
+            <div className="sm">{to.sec ? [to.sec.km != null ? 'Km ' + to.sec.km : '', to.sec.place || ''].filter(Boolean).join(' · ') || ' ' : to.point ? (away != null ? distText(away) + ' from the mess · ' : '') + 'the van brings it here' : here.state === 'off' ? 'Location is off – choose the section' : ' '}</div></div>
           <span className="sm" style={{ color: 'var(--leafD)', fontWeight: 600 }}>Change</span>
         </Link>}
+        {how === 'delivery' && to.point && <div className="row xs" style={{ gap: 8 }}><Icon name="info" size={14} /><span className="sp">You are outside every section. Your location goes with this order only – for the van's directions.</span></div>}
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {meals && <div className="row"><div className="tile s40"><Icon name={mealIcon[m]!} /></div><div className="sp"><b style={{ fontSize: 15 }}>{meals.name}</b><div className="xs">Packed · one a person</div></div><span className="chip" style={{ height: 28 }}>1</span></div>}
           {extras.map((e) => <div className="row" key={e.id}><div className={'tile s40 ' + (e.code.startsWith('water') ? 'blue' : 'leaf')}><Icon name={e.code.startsWith('water') ? 'glass-water' : 'salad'} /></div><div className="sp"><b style={{ fontSize: 15 }}>{e.name}</b><div className="xs">Extra – needs the mess's OK</div></div><Stepper value={extra[e.code] || 0} onChange={(k) => setExtra((x) => ({ ...x, [e.code]: k }))} max={10} /></div>)}
@@ -383,46 +398,46 @@ export function Parcel() {
       </Body>
       <Foot>
         <div className="row sm"><span className="sp">1 {meals?.name.toLowerCase() || 'meal'}{n ? ' · ' + n + ' extra' : ''}</span><span className="xs">Change or cancel for {w?.change_minutes ?? 0} min</span></div>
-        <Btn kind="sf" onClick={ask} busy={a.busy} disabled={!st.open || !meals || !mess}><Icon name="package-check" />Ask for the parcel</Btn>
+        <Btn kind="sf" onClick={ask} busy={a.busy} disabled={!st.open || !meals || !mess || (how === 'delivery' && !!to.asking)}><Icon name="package-check" />Ask for the parcel</Btn>
       </Foot>
     </Screen>
   );
 }
 
-// ── e05 · Circle / section ──
+// ── e05 · Section ── (0017: only sections; "By my location" leaves the choice to the phone's location again)
 export function SectionPick() {
   const s = useSession();
   const nav = useNavigate();
   const { mess } = useMyMess();
   const secs = useSections(mess?.site_id || s.me?.home_site_id);
-  const [circle, setCircle] = useState('');
   const [sel, setSel] = useState(pickedSection() || s.me?.home_section_id || '');
   const map = useMemo(() => toMap(secs.data || []), [secs.data]);
-  const list = (secs.data || []).filter((x) => !circle || x.circles?.code === circle);
-  const chosen = (secs.data || []).find((x) => x.id === sel);
-  const groups = [...new Set(list.map((x) => x.circles?.code || ''))];
+  const list = secs.data || [];
+  const chosen = list.find((x) => x.id === sel);
+  const keep = (id: string) => { try { if (id) sessionStorage.setItem('falcon.section', id); else sessionStorage.removeItem('falcon.section'); } catch { /* */ } nav(-1); };
   return (
     <Screen>
       <div className="map" style={{ height: 300 }}>
-        <GMap height={300} label="Map: the site's sections" fallback={<RoadMap sections={map.sections} circles={map.circles} mine={sel} height={300} label="The road with its sections" />}
-          marks={(secs.data || []).map((x) => { const q = pt(x.lat, x.lng); return q ? { ...q, kind: x.id === sel ? 'mine' : 'stop', label: x.code, title: x.name } as Mark : null; }).filter(Boolean) as Mark[]} />
+        <GMap height={300} label="Map: the site's sections" fallback={<RoadMap sections={map.sections} mine={sel} height={300} label="The road with its sections" />}
+          marks={list.map((x) => { const q = pt(x.lat, x.lng); return q ? { ...q, kind: x.id === sel ? 'mine' : 'stop', label: x.code, title: x.name } as Mark : null; }).filter(Boolean) as Mark[]} />
         <button className="ib" aria-label="Back" onClick={() => nav(-1)} style={{ position: 'absolute', left: 20, top: 18 }}><Icon name="chevron-left" /></button>
       </div>
       <div className="sheet" style={{ top: 270, overflowY: 'auto' }}>
         <div className="row"><b className="h2 sp">Where are you working?</b><span className="chip" style={{ height: 28 }}>{s.homeSite?.code}</span></div>
-        <div className="row wrap" style={{ gap: 8 }}><button className={'chip' + (!circle ? ' on' : '')} onClick={() => setCircle('')}>All</button>{map.circles.map((c) => <button key={c.code} className={'chip' + (circle === c.code ? ' on' : '')} onClick={() => setCircle(c.code)}>Circle {c.code}</button>)}</div>
-        {secs.loading ? <Loading /> : secs.error ? <Failed error={secs.error} retry={secs.reload} /> : list.length === 0 ? <Empty icon="map" title="No sections yet" text="The Site Admin adds the sections of the road." /> :
-          <div className="col" style={{ gap: 8 }}>{groups.map((g) => <div key={g} className="col" style={{ gap: 8 }}>
-            <span className="xs" style={{ fontWeight: 600 }}>Circle {g}</span>
-            {list.filter((x) => (x.circles?.code || '') === g).map((x, i) => (
-              <button key={x.id} className="card" onClick={() => setSel(x.id)} style={{ padding: 12, display: 'flex', gap: 12, alignItems: 'center', font: 'inherit', textAlign: 'left', cursor: 'pointer', ...(x.id === sel ? { border: '2px solid var(--leaf)' } : {}) }}>
-                <span className="av" style={{ width: 34, height: 34, background: 'var(--navy)', color: '#fff' }}>{i + 1}</span>
-                <div className="sp"><b style={{ fontSize: 15 }}>{x.code}{x.km != null ? ' · Km ' + x.km : ''}</b><div className="xs">{x.place || x.name}</div></div>
-                <Icon name={x.id === sel ? 'circle-check' : 'circle-dot'} size={18} />
-              </button>))}
-          </div>)}</div>}
+        <button className="card" onClick={() => keep('')} style={{ padding: 12, display: 'flex', gap: 12, alignItems: 'center', font: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
+          <span className="tile s40 blue"><Icon name="locate-fixed" /></span>
+          <div className="sp"><b style={{ fontSize: 15 }}>By my location</b><div className="xs">The section is found by itself – outside every section, the van comes to you</div></div>
+          <Icon name="chevron-right" size={18} />
+        </button>
+        {secs.loading ? <Loading /> : secs.error ? <Failed error={secs.error} retry={secs.reload} /> : list.length === 0 ? <Empty icon="map" title="No sections yet" text="The Site Admin adds the sections." /> :
+          <div className="col" style={{ gap: 8 }}>{list.map((x, i) => (
+            <button key={x.id} className="card" onClick={() => setSel(x.id)} style={{ padding: 12, display: 'flex', gap: 12, alignItems: 'center', font: 'inherit', textAlign: 'left', cursor: 'pointer', ...(x.id === sel ? { border: '2px solid var(--leaf)' } : {}) }}>
+              <span className="av" style={{ width: 34, height: 34, background: 'var(--navy)', color: '#fff' }}>{i + 1}</span>
+              <div className="sp"><b style={{ fontSize: 15 }}>{x.code}{x.km != null ? ' · Km ' + x.km : ''}</b><div className="xs">{x.place || x.name}</div></div>
+              <Icon name={x.id === sel ? 'circle-check' : 'circle-dot'} size={18} />
+            </button>))}</div>}
         <div className="row xs" style={{ gap: 8 }}><Icon name="info" size={14} /><span className="sp">A place other than your work place is shown to the Site Admin.</span></div>
-        <Btn kind="leaf" disabled={!chosen} onClick={() => { try { sessionStorage.setItem('falcon.section', sel); } catch { /* */ } nav(-1); }}>Deliver to {chosen ? chosen.code + (chosen.km != null ? ' · Km ' + chosen.km : '') : '…'}</Btn>
+        <Btn kind="leaf" disabled={!chosen} onClick={() => keep(sel)}>Deliver to {chosen ? chosen.code + (chosen.km != null ? ' · Km ' + chosen.km : '') : '…'}</Btn>
       </div>
     </Screen>
   );
@@ -553,7 +568,7 @@ function useOrder(id: string | undefined) {
   }, [id], ['orders', 'order_lines']);
 }
 interface Van { batch: string; code: string; state: string; dispatched_at: string | null; driver: string | null; driver_mobile: string | null; vehicle: string | null; vehicle_kind: string | null;
-  stops: { seq: number; section: string; km: number | null; place: string | null; eta: string | null; reached_at: string | null; mine: boolean }[] | null; last: { at: string; lat: number; lng: number } | null }
+  stops: { seq: number; section: string; km: number | null; place: string | null; eta: string | null; reached_at: string | null; mine: boolean; point?: boolean }[] | null; last: { at: string; lat: number; lng: number } | null }
 function useVan(id: string | undefined, on: boolean) {
   return useLoad(() => on ? call<Van | null>('my_van', { p_order: id }) : Promise.resolve(null), [id, on], ['batches', 'batch_stops', 'track_points']);
 }
@@ -591,7 +606,7 @@ export function OrderStatus() {
       <Body style={{ paddingBottom: 24 }}>
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div className="row"><div className="tile"><Icon name={o.kind === 'meal' ? 'utensils' : 'package'} size={22} /></div>
-            <div className="sp"><b style={{ fontSize: 15 }}>{what || lines.length + ' people'}</b><div className="sm">{o.kind === 'delivery' && sec ? 'To ' + sec.code + (sec.km != null ? ' · Km ' + sec.km : '') + (sec.place ? ' · ' + sec.place : '') : mess?.name}</div></div>
+            <div className="sp"><b style={{ fontSize: 15 }}>{what || lines.length + ' people'}</b><div className="sm">{o.kind === 'delivery' && sec ? 'To ' + sec.code + (sec.km != null ? ' · Km ' + sec.km : '') + (sec.place ? ' · ' + sec.place : '') : o.kind === 'delivery' && o.to_lat != null ? 'To your location – outside the sections' : mess?.name}</div></div>
             <span className={'chip ' + (o.state === 'dispatched' ? 'blue' : o.state === 'delivered' ? 'leaf' : ['refused', 'cancelled', 'failed'].includes(o.state) ? 'red' : 'amber')} style={{ height: 26 }}>{stateWord(o.state)}</span></div>
         </div>
         <div className="card" style={{ padding: '18px 16px 4px' }}>
@@ -634,17 +649,19 @@ export function Track() {
   const mins = mine?.eta ? Math.max(0, Math.round((new Date(mine.eta).getTime() - Date.now()) / 60000)) : null;
   // (23-11-2026, picture N3) the Google map: the mess, the stops with a place, the van where its driver's phone last said; the line
   // from the van through the stops left (straight lines – the road route is Google Maps' own)
-  const secPt = (code: string) => { const x = (secs.data || []).find((y) => y.code === code); return x ? pt(x.lat, x.lng) : null; };
+  // (0017) a stop that is a point: only his own is drawn (where he asked it to come); somebody else's is never shown
+  const mineAt = r.data?.o.to_lat != null ? pt(r.data.o.to_lat, r.data.o.to_lng) : null;
+  const secPt = (x: { section: string; point?: boolean; mine: boolean }) => { if (x.point) return x.mine ? mineAt : null; const y = (secs.data || []).find((z) => z.code === x.section); return y ? pt(y.lat, y.lng) : null; };
   const vanPt = v.state === 'on_the_way' && v.last ? pt(v.last.lat, v.last.lng) : null;
   const messPt = mess ? pt(mess.lat, mess.lng) : null;
-  const stopMarks = stops.map((x) => { const p = secPt(x.section); return p ? { ...p, kind: x.mine ? 'mine' : x.reached_at ? 'done' : 'stop', label: x.section, title: 'Section ' + x.section } as Mark : null; }).filter(Boolean) as Mark[];
+  const stopMarks = stops.map((x) => { const p = secPt(x); return p ? { ...p, kind: x.mine ? 'mine' : x.reached_at ? 'done' : 'stop', label: x.point ? 'You' : x.section, title: x.point ? 'Your location' : 'Section ' + x.section } as Mark : null; }).filter(Boolean) as Mark[];
   const gMarks: Mark[] = stopMarks.length || vanPt ? [...(messPt ? [{ ...messPt, kind: 'mess', title: mess!.name } as Mark] : []), ...stopMarks, ...(vanPt ? [{ ...vanPt, kind: 'van', title: v.vehicle || 'Van' } as Mark] : [])] : [];
-  const gLine = vanPt ? [vanPt, ...stops.filter((x) => !x.reached_at).map((x) => secPt(x.section)).filter(Boolean) as { lat: number; lng: number }[]] : undefined;
+  const gLine = vanPt ? [vanPt, ...stops.filter((x) => !x.reached_at).map((x) => secPt(x)).filter(Boolean) as { lat: number; lng: number }[]] : undefined;
   return (
     <Screen>
       <div className="map" style={{ position: 'absolute', inset: '0 0 250px 0' }}>
         <GMap marks={gMarks} line={gLine} height="100%" label="Map: the van, the mess and the stops"
-          fallback={<RoadMap sections={map.sections} circles={map.circles} mine={mineId} van={v.state === 'on_the_way' ? vanKm : null} done={(secs.data || []).filter((x) => stops.some((y) => y.section === x.code && y.reached_at)).map((x) => x.id)} height={600} label="The van on the road" />} />
+          fallback={<RoadMap sections={map.sections} mine={mineId} van={v.state === 'on_the_way' ? vanKm : null} done={(secs.data || []).filter((x) => stops.some((y) => y.section === x.code && y.reached_at)).map((x) => x.id)} height={600} label="The van on the road" />} />
       </div>
       <Link className="ib" to={'/app/orders/' + id} aria-label="Back" style={{ position: 'absolute', left: 20, top: 18, boxShadow: '0 6px 16px rgba(14,27,51,.15)' }}><Icon name="chevron-left" /></Link>
       <span className="chip" style={{ position: 'absolute', left: 76, top: 25, height: 32 }}><span className="dot sf" />{ago != null ? 'Live · updated ' + (ago < 60 ? ago + ' s' : Math.round(ago / 60) + ' min') + ' ago' : 'Waiting for the van\'s place'}</span>

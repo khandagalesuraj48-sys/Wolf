@@ -8,12 +8,13 @@ import { firstName, initials, mealName, time, today } from '../lib/fmt';
 import { Icon } from '../ui/Icon';
 import { RoadMap } from '../ui/RoadMap';
 import { GMap, pt, type Mark } from '../ui/GMap';
-import { usePlace } from '../lib/geo';
+import { directionsUrl, usePlace } from '../lib/geo';
 import { Body, Btn, Empty, ErrorLine, Failed, Loading, Screen, Tabs, Top } from '../ui/kit';
 
 interface PLine { item: string; qty: number; state: string; is_meal: boolean; failed_reason: string | null; delivered_qty: number | null }
 interface Pers { person_id: string; name: string; role: string | null; order_id: string; code: string; lines: PLine[] | null; confirmed: string | null }
-interface Stop { seq: number; section_id: string; section: string; km: number | null; place: string | null; lat: number | null; lng: number | null; eta: string | null; reached_at: string | null; people: Pers[] | null }
+// (0017) a stop is a section – or one order's location outside the sections ("point": section_id is empty, order_id is that order)
+interface Stop { seq: number; section_id: string | null; order_id?: string | null; point?: boolean; section: string; km: number | null; place: string | null; lat: number | null; lng: number | null; eta: string | null; reached_at: string | null; people: Pers[] | null }
 interface Trip { id: string; code: string; state: string; meal: string; service_date: string; planned_km: number | null; planned_minutes: number | null; dispatched_at: string | null; completed_at: string | null;
   vehicle_check: Record<string, boolean> | null; mess: string; vehicle: { reg_no: string | null; kind: string | null; capacity: number | null }; stops: Stop[] | null }
 
@@ -24,6 +25,8 @@ const pState = (p: Pers) => {
   if (l.length && l.every((x) => ['delivered', 'short', 'failed'].includes(x.state))) return 'done';
   return 'open';
 };
+const keyOf = (x: Stop) => x.section_id || 'p-' + x.order_id;
+const nameOf = (x: Stop) => x.point ? 'Location · ' + (x.people?.[0]?.name || x.section) : x.section;
 const what = (p: Pers) => (p.lines || []).map((l) => l.item.toLowerCase() + ' ' + l.qty).join(', ');
 
 function useMyBatches() {
@@ -159,15 +162,15 @@ export function TripStops() {
         <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 14 }}><span className="big">{doneN} of {people.length}</span><div className="sm">handed over so far · {people.filter((p) => pState(p) === 'failed').length} failed</div></div>
         {stops.map((x) => {
           const pp = x.people || [], d = pp.filter((p) => pState(p) !== 'open').length, isNext = x === next;
-          return <Link key={x.seq} to={'/driver/stops/' + x.section_id} className="card" style={{ padding: 12, display: 'flex', gap: 12, alignItems: 'center', textDecoration: 'none', color: 'inherit', ...(isNext ? { border: '2px solid var(--gold)' } : {}) }}>
+          return <Link key={x.seq} to={'/driver/stops/' + keyOf(x)} className="card" style={{ padding: 12, display: 'flex', gap: 12, alignItems: 'center', textDecoration: 'none', color: 'inherit', ...(isNext ? { border: '2px solid var(--gold)' } : {}) }}>
             <span className="av" style={{ width: 34, height: 34, background: d === pp.length ? 'var(--leaf)' : 'var(--navy3)', color: '#fff' }}>{d === pp.length ? <Icon name="check" size={16} /> : x.seq}</span>
-            <div className="sp"><b style={{ fontSize: 15 }}>{x.section}{x.km != null ? ' · Km ' + x.km : ''}</b><div className="xs">{d} of {pp.length}{x.reached_at ? ' · arrived ' + time(x.reached_at) : x.eta ? ' · about ' + time(x.eta) : ''}{x.place ? ' · ' + x.place : ''}</div></div>
+            <div className="sp"><b style={{ fontSize: 15 }}>{x.point && <Icon name="locate-fixed" size={14} />} {nameOf(x)}{x.km != null ? ' · Km ' + x.km : ''}</b><div className="xs">{d} of {pp.length}{x.reached_at ? ' · arrived ' + time(x.reached_at) : x.eta ? ' · about ' + time(x.eta) : ''}{x.place ? ' · ' + x.place : ''}</div></div>
             {isNext && <span className="chip" style={{ height: 26, background: 'var(--gold)', color: '#1D1404', borderColor: 'transparent' }}>Next</span>}
           </Link>;
         })}
         <div className="row xs" style={{ gap: 8 }}><Icon name="info" size={14} /><span className="sp">What is in each box is set by the mess – it cannot be changed here.</span></div>
         <ErrorLine error={a.error} />
-        {tr.state === 'on_the_way' && next && <Btn kind="gold" to={'/driver/route/' + next.section_id}><Icon name="navigation" />Go to {next.section}</Btn>}
+        {tr.state === 'on_the_way' && next && <Btn kind="gold" to={'/driver/route/' + keyOf(next)}><Icon name="navigation" />Go to {nameOf(next)}</Btn>}
         {tr.state === 'on_the_way' && allDone && <Btn kind="gold" onClick={() => nav('/driver/summary/' + tr.id)}>Trip summary</Btn>}
       </Body>
       <Tabs tabs={D_TABS} label="Driver" />
@@ -186,29 +189,29 @@ export function RouteNext() {
   useShareLocation(t.data);
   const me = usePlace();                     // (23-11-2026, picture N4) the van on the Google map is this phone's own place
   const tr = t.data;
-  const stop = (tr?.stops || []).find((x) => x.section_id === section);
+  const stop = (tr?.stops || []).find((x) => keyOf(x) === section);
   if (!tr || !stop) return <Screen dark><Top back="/driver/trip" title="Route" /><Body>{t.loading ? <Loading /> : <Empty icon="route" title="Not a stop of your trip" />}</Body></Screen>;
   const stops = tr.stops || [];
-  const gmaps = stop.lat != null && stop.lng != null ? 'https://www.google.com/maps/dir/?api=1&destination=' + stop.lat + ',' + stop.lng : 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent((stop.place || stop.section) + ' ' + (stop.km != null ? 'Km ' + stop.km : ''));
+  const gmaps = stop.lat != null && stop.lng != null ? directionsUrl({ lat: Number(stop.lat), lng: Number(stop.lng) }) : 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent((stop.place || stop.section) + ' ' + (stop.km != null ? 'Km ' + stop.km : ''));
   return (
     <Screen dark>
       <div className="map" style={{ position: 'absolute', inset: '0 0 260px 0' }}>
         {(() => {
-          const marks = stops.map((x) => { const q = pt(x.lat, x.lng); return q ? { ...q, kind: x.section_id === section ? 'mine' : x.reached_at ? 'done' : 'stop', label: String(x.seq), title: x.section } as Mark : null; }).filter(Boolean) as Mark[];
+          const marks = stops.map((x) => { const q = pt(x.lat, x.lng); return q ? { ...q, kind: keyOf(x) === section ? 'mine' : x.reached_at ? 'done' : 'stop', label: String(x.seq), title: nameOf(x) } as Mark : null; }).filter(Boolean) as Mark[];
           const van = me.state === 'ok' ? { lat: me.lat, lng: me.lng } : null;
           const left = stops.filter((x) => !x.reached_at).map((x) => pt(x.lat, x.lng)).filter(Boolean) as { lat: number; lng: number }[];
           return <GMap dark marks={marks.length ? [...marks, ...(van ? [{ ...van, kind: 'van', title: 'You' } as Mark] : [])] : []} line={van ? [van, ...left] : left} height="100%" label="Map: your van and the trip's stops"
-            fallback={<RoadMap dark sections={stops.map((x) => ({ id: x.section_id, code: x.section, km: x.km }))} mine={section} done={stops.filter((x) => x.reached_at).map((x) => x.section_id)} height={600} label="The trip's stops on the road" />} />;
+            fallback={<RoadMap dark sections={stops.filter((x) => !x.point).map((x) => ({ id: keyOf(x), code: x.section, km: x.km }))} mine={section} done={stops.filter((x) => x.reached_at).map(keyOf)} height={600} label="The trip's stops on the road" />} />;
         })()}
       </div>
       <button className="ib" aria-label="Back" onClick={() => nav('/driver/trip')} style={{ position: 'absolute', left: 20, top: 18 }}><Icon name="chevron-left" /></button>
       <div className="sheet">
-        <div className="row" style={{ gap: 12 }}><span className="av" style={{ width: 40, height: 40, background: 'var(--gold)', color: '#1D1404' }}>{stop.seq}</span><div className="sp"><span className="xs">Next stop</span><b style={{ display: 'block', fontSize: 17 }}>{stop.section}{stop.km != null ? ' · Km ' + stop.km : ''}{stop.place ? ' · ' + stop.place : ''}</b></div><b>{stop.eta ? time(stop.eta) : ''}</b></div>
+        <div className="row" style={{ gap: 12 }}><span className="av" style={{ width: 40, height: 40, background: 'var(--gold)', color: '#1D1404' }}>{stop.seq}</span><div className="sp"><span className="xs">Next stop</span><b style={{ display: 'block', fontSize: 17 }}>{nameOf(stop)}{stop.km != null ? ' · Km ' + stop.km : ''}{stop.place ? ' · ' + stop.place : ''}</b></div><b>{stop.eta ? time(stop.eta) : ''}</b></div>
         <div className="row xs"><span className="sp">{stops.filter((x) => x.reached_at).length} of {stops.length} stops done · {(stop.people || []).length} parcels there</span></div>
         <ErrorLine error={a.error} />
         <div className="row" style={{ gap: 10 }}>
           <a className="btn ghost" href={gmaps} target="_blank" rel="noreferrer" style={{ flex: 1 }}><Icon name="navigation" />Open in Google Maps</a>
-          <Btn kind="gold" busy={a.busy} onClick={() => a.run(async () => { await call('reach_stop', { p_batch: tr.id, p_section: stop.section_id }); nav('/driver/stops/' + stop.section_id); })} style={{ flex: 1 }}>I'm here</Btn>
+          <Btn kind="gold" busy={a.busy} onClick={() => a.run(async () => { await call('reach_stop', stop.point ? { p_batch: tr.id, p_order: stop.order_id } : { p_batch: tr.id, p_section: stop.section_id }); nav('/driver/stops/' + keyOf(stop)); })} style={{ flex: 1 }}>I'm here</Btn>
         </div>
       </div>
     </Screen>
@@ -222,14 +225,15 @@ export function StopPeople() {
   const cur = current(b.data);
   const t = useTrip(cur?.id);
   useShareLocation(t.data);
-  const stop = (t.data?.stops || []).find((x) => x.section_id === section);
+  const stop = (t.data?.stops || []).find((x) => keyOf(x) === section);
   if (!stop) return <Screen dark><Top back="/driver/trip" title="Stop" /><Body>{t.loading ? <Loading /> : <Empty icon="map-pin" title="Not a stop of your trip" />}</Body></Screen>;
   const pp = stop.people || [];
   const open = pp.filter((p) => pState(p) === 'open'), done = pp.filter((p) => pState(p) !== 'open');
   return (
     <Screen dark>
-      <Top back="/driver/trip" title={stop.section + (stop.km != null ? ' · Km ' + stop.km : '')} sub={'Stop ' + stop.seq + ' · ' + pp.length + ' parcels' + (stop.place ? ' · ' + stop.place : '')} />
+      <Top back="/driver/trip" title={nameOf(stop) + (stop.km != null ? ' · Km ' + stop.km : '')} sub={'Stop ' + stop.seq + ' · ' + pp.length + ' parcels' + (stop.place ? ' · ' + stop.place : '')} />
       <Body style={{ gap: 10 }}>
+        {stop.lat != null && stop.lng != null && <a className="btn ghost" href={directionsUrl({ lat: Number(stop.lat), lng: Number(stop.lng) })} target="_blank" rel="noreferrer"><Icon name="navigation" />Directions in Google Maps</a>}
         <div className="row xs"><span className="sp">To give · {open.length}</span><span>Given · {done.length}</span></div>
         {open.map((p) => <Link key={p.order_id + p.person_id} to={'/driver/hand/' + p.order_id + '/' + p.person_id} className="card" style={{ padding: 12, display: 'flex', gap: 12, alignItems: 'center', textDecoration: 'none', color: 'inherit' }}>
           <div className="av navy">{initials(p.name)}</div><div className="sp"><b style={{ fontSize: 15 }}>{p.name}</b><div className="xs">{p.role || ''} · {p.code} · {what(p)}</div></div><Icon name="chevron-right" size={18} /></Link>)}
@@ -272,7 +276,7 @@ export function HandOver() {
     </Body></Screen>);
   return (
     <Screen dark>
-      <Top back={'/driver/stops/' + stop.section_id} title={p.name} sub={p.code + ' · ' + what(p)} />
+      <Top back={'/driver/stops/' + keyOf(stop)} title={p.name} sub={p.code + ' · ' + what(p)} />
       <Body style={{ gap: 14 }}>
         {mode === 'code' && <>
           <div className="card" style={{ textAlign: 'center' }}><b style={{ fontSize: 17 }}>Ask for his code</b><div className="sm">It is on his phone, in FALCON</div></div>
@@ -294,7 +298,7 @@ export function HandOver() {
           <textarea className="inp" value={note} onChange={(e) => setNote(e.target.value)} placeholder="More (optional)" style={{ height: 60, padding: 12, font: 'inherit' }} />
           <div className="row xs" style={{ gap: 8 }}><Icon name="info" size={14} /><span className="sp">{firstName(p.name)} and the mess are told. A failed parcel is not billed.</span></div>
           <ErrorLine error={a.error} />
-          <Btn kind="red" busy={a.busy} onClick={() => a.run(async () => { await call('fail_delivery', { p_batch: tr.id, p_order: order, p_person: person, p_reason: why + (note ? ' – ' + note : '') }); nav('/driver/stops/' + stop.section_id); })}>Mark not delivered</Btn>
+          <Btn kind="red" busy={a.busy} onClick={() => a.run(async () => { await call('fail_delivery', { p_batch: tr.id, p_order: order, p_person: person, p_reason: why + (note ? ' – ' + note : '') }); nav('/driver/stops/' + keyOf(stop)); })}>Mark not delivered</Btn>
           <Btn kind="ghost" onClick={() => setMode('code')}>Back</Btn>
         </>}
       </Body>
@@ -319,7 +323,7 @@ export function TripSummary() {
       <Body style={{ gap: 12 }}>
         <div className="card" style={{ display: 'flex', gap: 14, alignItems: 'center' }}><span className="big">{given.length} / {people.length}</span><div className="sm">delivered</div></div>
         <div className="row" style={{ gap: 10 }}><div className="card" style={{ flex: 1, padding: 12 }}><b style={{ fontSize: 20 }}>{failed.length}</b><div className="xs">not delivered</div></div><div className="card" style={{ flex: 1, padding: 12 }}><b style={{ fontSize: 20 }}>{short.length}</b><div className="xs">short</div></div></div>
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{stops.map((x) => { const pp = x.people || []; return <div key={x.seq} className="row sm"><span className="sp">{x.section} · {pp.filter((p) => pState(p) === 'done').length} of {pp.length}{pp.some((p) => pState(p) === 'failed') ? ' · ' + pp.filter((p) => pState(p) === 'failed').map((p) => firstName(p.name)).join(', ') + ' not delivered' : ''}</span><span className="xs">{time(x.reached_at)}</span></div>; })}</div>
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{stops.map((x) => { const pp = x.people || []; return <div key={x.seq} className="row sm"><span className="sp">{nameOf(x)} · {pp.filter((p) => pState(p) === 'done').length} of {pp.length}{pp.some((p) => pState(p) === 'failed') ? ' · ' + pp.filter((p) => pState(p) === 'failed').map((p) => firstName(p.name)).join(', ') + ' not delivered' : ''}</span><span className="xs">{time(x.reached_at)}</span></div>; })}</div>
         {failed.length > 0 && <div className="card sm"><b>Give {failed.length} parcel{failed.length > 1 ? 's' : ''} back</b> at the mess counter.</div>}
         <div className="row xs" style={{ gap: 8 }}><Icon name="shield-check" size={14} /><span className="sp">Your location stops being shared when you close the trip.</span></div>
         <ErrorLine error={a.error} />

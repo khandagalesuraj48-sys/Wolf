@@ -106,7 +106,7 @@ piece of work.
    HR / ERP app opens FALCON's web there when the FALCON app is not on the phone.
 5. **What it changes for a person:** an employee who taps "Mess" in the HR / ERP app is in FALCON at once (no company code, no
    WhatsApp code); a new employee of HR is made in FALCON as HR says (code, name, mobile, site, designation). A person stopped in
-   FALCON stays stopped. The phone's location is read only while the mess home is open and is never saved or sent.
+   FALCON stays stopped. The phone's location is read only while a screen that needs it is open; it is sent only with a van order (part 0017 – kept with that order only when it is outside every section).
 
 ## 8 · The masters: Edit, Remove, From date; the Km by itself (decision of 23-11-2026; pictures M1–M8)
 
@@ -116,6 +116,17 @@ piece of work.
 2. **Then merge the web update** (and the FALCON app's: a removed mess / section / site leaves the phone's lists from its date).
 3. **What it changes:** every row of Sites and sections, Mess and contractors, Work orders and rates has Edit · History · Remove;
    Remove asks the date and the reason and the record stays ("Removed" list, History). Nothing is ever wiped out.
+
+## 9 · Only Sections; the van to the person's location (decision of 23-11-2026)
+
+1. **The database first:** run `supabase/updates/2026-11-23f_sections_only.sql` (part 0017) once – BEFORE merging the web update (the
+   web and the app of before keep working with it). It deletes nothing (the circles stay in the database, shown nowhere); the only
+   rows it changes are the Km of the sections that have a place (worked out again, in the order of their codes).
+2. **Then merge the web update and the FALCON app's.**
+3. **Then give every section its metres:** Sites and sections → the section → Edit → "Metres" (beside its latitude and longitude). A
+   section without its place AND metres is never found by a location – an order from there is taken as "outside every section".
+4. **What it changes:** a van order goes to the section where the person is, by itself; from outside every section it brings his
+   location – the kitchen and the driver get it with Google's directions. Nobody sees a circle any more.
 
 ## Going back
 
