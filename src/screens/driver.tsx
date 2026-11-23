@@ -7,6 +7,8 @@ import { useSession } from '../lib/session';
 import { firstName, initials, mealName, time, today } from '../lib/fmt';
 import { Icon } from '../ui/Icon';
 import { RoadMap } from '../ui/RoadMap';
+import { GMap, pt, type Mark } from '../ui/GMap';
+import { usePlace } from '../lib/geo';
 import { Body, Btn, Empty, ErrorLine, Failed, Loading, Screen, Tabs, Top } from '../ui/kit';
 
 interface PLine { item: string; qty: number; state: string; is_meal: boolean; failed_reason: string | null; delivered_qty: number | null }
@@ -182,6 +184,7 @@ export function RouteNext() {
   const t = useTrip(cur?.id);
   const a = useAct();
   useShareLocation(t.data);
+  const me = usePlace();                     // (23-11-2026, picture N4) the van on the Google map is this phone's own place
   const tr = t.data;
   const stop = (tr?.stops || []).find((x) => x.section_id === section);
   if (!tr || !stop) return <Screen dark><Top back="/driver/trip" title="Route" /><Body>{t.loading ? <Loading /> : <Empty icon="route" title="Not a stop of your trip" />}</Body></Screen>;
@@ -190,7 +193,13 @@ export function RouteNext() {
   return (
     <Screen dark>
       <div className="map" style={{ position: 'absolute', inset: '0 0 260px 0' }}>
-        <RoadMap dark sections={stops.map((x) => ({ id: x.section_id, code: x.section, km: x.km }))} mine={section} done={stops.filter((x) => x.reached_at).map((x) => x.section_id)} height={600} label="The trip's stops on the road" />
+        {(() => {
+          const marks = stops.map((x) => { const q = pt(x.lat, x.lng); return q ? { ...q, kind: x.section_id === section ? 'mine' : x.reached_at ? 'done' : 'stop', label: String(x.seq), title: x.section } as Mark : null; }).filter(Boolean) as Mark[];
+          const van = me.state === 'ok' ? { lat: me.lat, lng: me.lng } : null;
+          const left = stops.filter((x) => !x.reached_at).map((x) => pt(x.lat, x.lng)).filter(Boolean) as { lat: number; lng: number }[];
+          return <GMap dark marks={marks.length ? [...marks, ...(van ? [{ ...van, kind: 'van', title: 'You' } as Mark] : [])] : []} line={van ? [van, ...left] : left} height="100%" label="Map: your van and the trip's stops"
+            fallback={<RoadMap dark sections={stops.map((x) => ({ id: x.section_id, code: x.section, km: x.km }))} mine={section} done={stops.filter((x) => x.reached_at).map((x) => x.section_id)} height={600} label="The trip's stops on the road" />} />;
+        })()}
       </div>
       <button className="ib" aria-label="Back" onClick={() => nav('/driver/trip')} style={{ position: 'absolute', left: 20, top: 18 }}><Icon name="chevron-left" /></button>
       <div className="sheet">
@@ -198,7 +207,7 @@ export function RouteNext() {
         <div className="row xs"><span className="sp">{stops.filter((x) => x.reached_at).length} of {stops.length} stops done · {(stop.people || []).length} parcels there</span></div>
         <ErrorLine error={a.error} />
         <div className="row" style={{ gap: 10 }}>
-          <a className="btn ghost" href={gmaps} target="_blank" rel="noreferrer" style={{ flex: 1 }}><Icon name="navigation" />Google Maps</a>
+          <a className="btn ghost" href={gmaps} target="_blank" rel="noreferrer" style={{ flex: 1 }}><Icon name="navigation" />Open in Google Maps</a>
           <Btn kind="gold" busy={a.busy} onClick={() => a.run(async () => { await call('reach_stop', { p_batch: tr.id, p_section: stop.section_id }); nav('/driver/stops/' + stop.section_id); })} style={{ flex: 1 }}>I'm here</Btn>
         </div>
       </div>

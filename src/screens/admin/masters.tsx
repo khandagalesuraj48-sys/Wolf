@@ -8,6 +8,7 @@ import { useSession } from '../../lib/session';
 import { day, inr, maskMobile, mealName, MEALS, today } from '../../lib/fmt';
 import { Icon } from '../../ui/Icon';
 import { RoadMap } from '../../ui/RoadMap';
+import { GMap, pt, type Mark } from '../../ui/GMap';
 import { ErrorLine, Failed, Input, Loading } from '../../ui/kit';
 import { Kpi, SitePick, Tbl, Web } from '../../ui/web';
 
@@ -35,7 +36,8 @@ export function Sites() {
   return (
     <Web title={'Circles and sections'} roles={['system_admin', 'site_admin']} actions={<SitePick value={site} onChange={setSite} />}>
       <div className="g2" style={{ gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr)' }}>
-        <div className="wcard" style={{ padding: 0, overflow: 'hidden' }}><RoadMap sections={(secs.data || []).map((y) => ({ id: y.id, code: y.code, km: y.km, circle: cm.get(y.circle_id)?.code }))} circles={(circles.data || []).map((y) => ({ code: y.code, km_from: y.km_from, km_to: y.km_to }))} height={320} label="The site's road with its circles and sections" /></div>
+        <div className="wcard" style={{ padding: 0, overflow: 'hidden' }}><GMap height={320} label="Map: the site's sections" fallback={<RoadMap sections={(secs.data || []).map((y) => ({ id: y.id, code: y.code, km: y.km, circle: cm.get(y.circle_id)?.code }))} circles={(circles.data || []).map((y) => ({ code: y.code, km_from: y.km_from, km_to: y.km_to }))} height={320} label="The site's road with its circles and sections" />}
+          marks={(secs.data || []).map((y) => { const q = pt(y.lat, y.lng); return q ? { ...q, kind: 'stop', label: y.code, title: y.name } as Mark : null; }).filter(Boolean) as Mark[]} /></div>
         <div className="wcard"><h3>Circles and sections</h3>
           {(circles.data || []).map((ci) => <div key={ci.id} style={{ marginBottom: 10 }}><div className="row sm"><b className="sp" style={{ color: 'var(--ink)' }}>Circle {ci.code}{ci.km_from != null ? ' · Km ' + ci.km_from + ' – ' + ci.km_to : ''}</b><span className="xs">{(secs.data || []).filter((y) => y.circle_id === ci.id).length} sections</span></div>
             {(secs.data || []).filter((y) => y.circle_id === ci.id).map((y) => <div key={y.id} className="row xs" style={{ padding: '4px 0 4px 12px' }}><span className="sp">{y.code}{y.km != null ? ' · Km ' + y.km : ''}{y.place ? ' · ' + y.place : ''}</span><span>{y.lat != null ? y.lat + ', ' + y.lng : 'no GPS'}</span></div>)}</div>)}

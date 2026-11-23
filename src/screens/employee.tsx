@@ -8,13 +8,16 @@ import { useSession } from '../lib/session';
 import { day, dayLong, firstName, greeting, initials, mealIcon, mealName, MEALS, nowHM, time, today, type Meal } from '../lib/fmt';
 import { Icon } from '../ui/Icon';
 import { RoadMap, type MapCircle, type MapSection } from '../ui/RoadMap';
+import { GMap, pt, type Mark } from '../ui/GMap';
+import { atMess, directionsUrl, distText, metres, usePlace } from '../lib/geo';
+import { closeHrBanner, readHr } from '../lib/hrinfo';
 import { Body, Btn, Denied, Empty, ErrorLine, Failed, Field, Foot, Input, Loading, Screen, Seg, Stepper, Tabs, Top, CodeBoxes } from '../ui/kit';
 
 // ── shared data ──
-interface Mess { id: string; name: string; site_id: string; contractor_id: string | null; counters: number | null }
+interface Mess { id: string; name: string; site_id: string; contractor_id: string | null; counters: number | null; lat: number | null; lng: number | null; radius_m: number | null }
 interface Win { meal: Meal; serve_from: string; serve_to: string; order_by: string; change_minutes: number }
 interface Item { id: string; code: string; name: string; kind: string; meal: string | null }
-interface Sec { id: string; code: string; name: string; km: number | null; place: string | null; circle_id: string; circles?: { code: string; km_from: number | null; km_to: number | null } }
+interface Sec { id: string; code: string; name: string; km: number | null; place: string | null; circle_id: string; lat: number | null; lng: number | null; circles?: { code: string; km_from: number | null; km_to: number | null } }
 interface Order { id: string; code: string; kind: 'meal' | 'parcel' | 'delivery'; meal: Meal; service_date: string; state: string; created_at: string; accepted_at: string | null;
   change_until: string | null; ready_at: string | null; to_section_id: string | null; guest_visit_id: string | null; host_state: string; refused_reason: string | null; mess_id: string; requested_by: string; is_group: boolean; note: string | null }
 interface Line { id: string; order_id: string; person_id: string; item_id: string; is_meal: boolean; qty: number; state: string; delivered_qty: number | null; short_qty: number | null; items?: { name: string; code: string } }
@@ -34,7 +37,7 @@ export function useMyMess() {
   const s = useSession();
   const [pick, setPick] = useState(chosenMess());
   const site = s.me?.home_site_id;
-  const list = useLoad(() => rows<Mess>(db().from('messes').select('id,name,site_id,contractor_id,counters').eq('active', true).order('name')), [s.me?.id]);
+  const list = useLoad(() => rows<Mess>(db().from('messes').select('id,name,site_id,contractor_id,counters,lat,lng,radius_m').eq('active', true).order('name')), [s.me?.id]);
   const mess = list.data?.find((m) => m.id === pick) || list.data?.find((m) => m.site_id === site) || list.data?.[0] || null;
   const choose = (id: string) => { try { sessionStorage.setItem('falcon.mess', id); } catch { /* */ } setPick(id); };
   return { mess, list, choose };
@@ -59,7 +62,7 @@ function useItems() {
   return useLoad(() => rows<Item>(db().from('items').select('id,code,name,kind,meal').eq('active', true).order('name')), []);
 }
 function useSections(siteId: string | null | undefined) {
-  return useLoad(() => siteId ? rows<Sec>(db().from('sections').select('id,code,name,km,place,circle_id,circles(code,km_from,km_to)').eq('site_id', siteId).eq('active', true).order('km'))
+  return useLoad(() => siteId ? rows<Sec>(db().from('sections').select('id,code,name,km,place,circle_id,lat,lng,circles(code,km_from,km_to)').eq('site_id', siteId).eq('active', true).order('km'))
     : Promise.resolve([] as Sec[]), [siteId]);
 }
 const toMap = (secs: Sec[]) => {
@@ -80,7 +83,17 @@ export function Home() {
     .order('created_at', { ascending: false }).limit(1)), [s.me?.id], ['orders']);
   const month = useLoad(() => call<{ meals: number; parcels: number }>('my_month'), [s.me?.id]);
   const unread = useLoad(() => rows(db().from('notifications').select('id').is('read_at', null).limit(20)), [s.me?.id], ['notifications']);
+  // (23-11-2026, his word: "app swata check krel user kuthe aahe … mess location madhe asel tr mess ch auto yeil … lamb asel tr mess che
+  // direction kiti lamb te dakhwel ani auto parcel") where he is: at the mess → "At the mess"; away → how far, the way, "Parcel"
+  const messPt = mess ? pt(mess.lat, mess.lng) : null;
+  const place = usePlace(Boolean(messPt));
+  const [pick, setPick] = useState<'mess' | 'parcel' | null>(null);
+  const [hr, setHr] = useState(readHr);
   if (!s.me) return null;
+  const here = place.state === 'ok' && messPt && mess ? atMess(place, mess) : null;
+  const away = place.state === 'ok' && messPt ? metres(place, messPt) : null;
+  const mode = pick || (here === true ? 'mess' : here === false ? 'parcel' : null);
+  const hrToday = hr && hr.day === today() ? hr : null;
   const meal = currentMeal(wins.data || []);
   const w = (wins.data || []).find((x) => x.meal === meal);
   const st = winState(w, today(), 'meal');
@@ -94,15 +107,63 @@ export function Home() {
         right={<Link className="ib" to="/app/notifications" aria-label="Notifications" style={{ position: 'relative' }}><Icon name="bell" />{(unread.data?.length || 0) > 0 && <span className="dot sf" style={{ position: 'absolute', top: 9, right: 9 }} />}</Link>} />
       <Body style={{ paddingBottom: 100 }}>
         {s.me.state === 'temporary' && <Link to="/start/temporary" className="row sm" style={{ background: 'var(--amberS)', color: 'var(--amber)', borderRadius: 14, padding: '10px 12px', gap: 8, textDecoration: 'none' }}><Icon name="clock-alert" size={16} /><span className="sp">Temporary access – waiting for the Site Admin</span><Icon name="chevron-right" size={16} /></Link>}
-        <div className="hero">
-          <div className="row"><span className="chip sf" style={{ height: 26 }}>{mealName(meal)} · {st.open ? 'open ' + st.label : st.label}</span><span className="sp" /><span className="xs">{dayLong(today())}</span></div>
-          <p style={{ margin: '14px 0 4px', fontSize: 24, fontWeight: 700, letterSpacing: '-.02em' }}>{st.open ? 'Your ' + meal + ' is ready to order' : mess ? 'No meal open right now' : 'Your site has no mess yet'}</p>
-          {w && <div className="row sm"><Icon name="clock" size={16} />Parcels asked by {hm(w.order_by)} · served {hm(w.serve_from)}–{hm(w.serve_to)}</div>}
-          <div className="row" style={{ marginTop: 16, gap: 10 }}>
-            <Btn kind="gold" to="/app/scan" style={{ height: 48, fontSize: 15 }}><Icon name="scan-line" />Scan QR</Btn>
-            <Btn kind="ghost" to="/app/parcel" style={{ height: 48, fontSize: 15, background: 'transparent', color: '#fff', borderColor: '#33496F' }}><Icon name="package" />Parcel</Btn>
+        {hrToday?.banner && <>
+          <div className="row" style={{ background: 'var(--leafS)', color: 'var(--leafD)', borderRadius: 16, padding: '12px 14px', gap: 10 }}>
+            <Icon name="shield-check" />
+            <div className="sp"><b style={{ fontSize: 14 }}>Signed in through RCL HR</b><div className="xs" style={{ color: 'var(--leafD)' }}>{s.me.full_name}{s.me.rcl_id ? ' · ' + s.me.rcl_id : ''} · no code needed again</div></div>
+            <button type="button" className="ib" aria-label="Close" style={{ width: 36, height: 36, background: 'transparent', border: 0, color: 'var(--leafD)' }} onClick={() => setHr(closeHrBanner())}><Icon name="x" size={18} /></button>
           </div>
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <b className="h2">Comes from HR by itself</b>
+            {[['id-card', 'Name, employee code, site, mobile'], ['user-check', 'Present today (HR attendance)'], ['users', 'New employee or new site in HR – in the mess too']].map(([ic, t]) =>
+              <div key={t} className="row sm"><Icon name={ic!} size={16} /><span className="sp">{t}</span><span style={{ color: 'var(--leaf)', display: 'inline-flex' }}><Icon name="check" size={16} /></span></div>)}
+          </div>
+        </>}
+        <div className="hero">
+          <div className="row">
+            {here === true && mess ? <span className="chip leaf" style={{ height: 26 }}><Icon name="map-pin" size={14} />You are at {mess.name}</span>
+              : here === false && mess && away != null ? <span className="chip sf" style={{ height: 26 }}><Icon name="route" size={14} />{distText(away)} from {mess.name}</span>
+              : <span className="chip sf" style={{ height: 26 }}>{mealName(meal)} · {st.open ? 'open ' + st.label : st.label}</span>}
+            <span className="sp" /><span className="xs">{mode ? nowHM() : dayLong(today())}</span>
+          </div>
+          <p style={{ margin: '14px 0 4px', fontSize: 24, fontWeight: 700, letterSpacing: '-.02em' }}>
+            {!mess ? 'Your site has no mess yet' : !st.open ? 'No meal open right now' : mode === 'mess' ? mealName(meal) + ' at the mess'
+              : mode === 'parcel' ? mealName(meal) + ' parcel to your section' : 'Your ' + meal + ' is ready to order'}</p>
+          {w && (mode
+            ? <div className="row sm"><Icon name={meal === 'dinner' ? 'moon' : 'sun'} size={16} />{mealName(meal)} by the server's time · {mode === 'parcel' ? 'ask by ' + hm(w.order_by) : 'open till ' + hm(w.serve_to)}</div>
+            : <div className="row sm"><Icon name="clock" size={16} />Parcels asked by {hm(w.order_by)} · served {hm(w.serve_from)}–{hm(w.serve_to)}</div>)}
+          {hrToday?.in && <div className="row sm"><span style={{ color: '#7FD39A', display: 'inline-flex' }}><Icon name="user-check" size={16} /></span>Present since {hrToday.in} · from HR attendance</div>}
+          {mode ? <>
+            <div className="seg" role="tablist" aria-label="How" style={{ marginTop: 14, background: '#1F3354' }}>
+              {(['mess', 'parcel'] as const).map((m) => <span key={m} role="tab" tabIndex={0} aria-selected={mode === m} className={mode === m ? 'on' : ''}
+                style={{ cursor: 'pointer', ...(mode === m ? {} : { color: '#B8C3D6' }) }} onClick={() => setPick(m)} onKeyDown={(e) => e.key === 'Enter' && setPick(m)}>{m === 'mess' ? 'At the mess' : 'Parcel'}</span>)}
+            </div>
+            {mode === 'mess'
+              ? <Btn kind="gold" to="/app/scan" style={{ marginTop: 12, height: 50, fontSize: 15 }}><Icon name="scan-line" />Scan the counter QR</Btn>
+              : <Btn kind="gold" to="/app/parcel" style={{ marginTop: 12, height: 50, fontSize: 15 }}><Icon name="package" />Ask {meal} parcel</Btn>}
+          </> : (
+            <div className="row" style={{ marginTop: 16, gap: 10 }}>
+              <Btn kind="gold" to="/app/scan" style={{ height: 48, fontSize: 15 }}><Icon name="scan-line" />Scan QR</Btn>
+              <Btn kind="ghost" to="/app/parcel" style={{ height: 48, fontSize: 15, background: 'transparent', color: '#fff', borderColor: '#33496F' }}><Icon name="package" />Parcel</Btn>
+            </div>
+          )}
         </div>
+        {messPt && mess && (
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <GMap height={here === true ? 118 : 200} label={'Map: you and ' + mess.name} fallback={null}
+              marks={[{ ...messPt, kind: 'mess', title: mess.name } as Mark, ...(place.state === 'ok' ? [{ lat: place.lat, lng: place.lng, kind: 'you', title: 'You' } as Mark] : [])]}
+              ring={{ center: messPt, metres: mess.radius_m || 100 }} />
+            <div className="row" style={{ padding: '12px 14px' }}>
+              {place.state === 'ok' && away != null ? (here
+                ? <><span className="tile s40 leaf"><Icon name="circle-check" /></span><div className="sp"><b style={{ fontSize: 15 }}>Inside the mess area</b><div className="xs">{distText(away)} from the mess · by your phone's location</div></div></>
+                : <><div className="sp"><b style={{ fontSize: 15 }}>{distText(away)} away</b><div className="xs">Going to the mess? Meal at the mess comes by itself there.</div></div>
+                  <a className="btn sm ghost" href={directionsUrl(messPt)} target="_blank" rel="noopener noreferrer"><Icon name="navigation" size={16} />Directions</a></>)
+                : place.state === 'asking' ? <div className="sp xs">Finding where you are…</div>
+                : <><div className="sp"><b style={{ fontSize: 15 }}>Location is off</b><div className="xs">Turn it on – the app then chooses "At the mess" or "Parcel" by itself.</div></div>
+                  <Btn kind="ghost sm" onClick={place.ask}>Try again</Btn></>}
+            </div>
+          </div>
+        )}
         {o && (
           <Link className="card lift" to={'/app/orders/' + o.id} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div className="row"><div className="tile"><Icon name={o.state === 'dispatched' ? 'truck' : o.kind === 'meal' ? 'utensils' : 'package'} size={22} /></div>
@@ -341,7 +402,8 @@ export function SectionPick() {
   return (
     <Screen>
       <div className="map" style={{ height: 300 }}>
-        <RoadMap sections={map.sections} circles={map.circles} mine={sel} height={300} label="The road with its sections" />
+        <GMap height={300} label="Map: the site's sections" fallback={<RoadMap sections={map.sections} circles={map.circles} mine={sel} height={300} label="The road with its sections" />}
+          marks={(secs.data || []).map((x) => { const q = pt(x.lat, x.lng); return q ? { ...q, kind: x.id === sel ? 'mine' : 'stop', label: x.code, title: x.name } as Mark : null; }).filter(Boolean) as Mark[]} />
         <button className="ib" aria-label="Back" onClick={() => nav(-1)} style={{ position: 'absolute', left: 20, top: 18 }}><Icon name="chevron-left" /></button>
       </div>
       <div className="sheet" style={{ top: 270, overflowY: 'auto' }}>
@@ -489,7 +551,7 @@ function useOrder(id: string | undefined) {
   }, [id], ['orders', 'order_lines']);
 }
 interface Van { batch: string; code: string; state: string; dispatched_at: string | null; driver: string | null; driver_mobile: string | null; vehicle: string | null; vehicle_kind: string | null;
-  stops: { seq: number; section: string; km: number | null; place: string | null; eta: string | null; reached_at: string | null; mine: boolean }[] | null; last: { at: string } | null }
+  stops: { seq: number; section: string; km: number | null; place: string | null; eta: string | null; reached_at: string | null; mine: boolean }[] | null; last: { at: string; lat: number; lng: number } | null }
 function useVan(id: string | undefined, on: boolean) {
   return useLoad(() => on ? call<Van | null>('my_van', { p_order: id }) : Promise.resolve(null), [id, on], ['batches', 'batch_stops', 'track_points']);
 }
@@ -568,10 +630,19 @@ export function Track() {
   const mineId = (secs.data || []).find((x) => x.code === mine?.section)?.id;
   const ago = v.last ? Math.max(0, Math.round((Date.now() - new Date(v.last.at).getTime()) / 1000)) : null;
   const mins = mine?.eta ? Math.max(0, Math.round((new Date(mine.eta).getTime() - Date.now()) / 60000)) : null;
+  // (23-11-2026, picture N3) the Google map: the mess, the stops with a place, the van where its driver's phone last said; the line
+  // from the van through the stops left (straight lines – the road route is Google Maps' own)
+  const secPt = (code: string) => { const x = (secs.data || []).find((y) => y.code === code); return x ? pt(x.lat, x.lng) : null; };
+  const vanPt = v.state === 'on_the_way' && v.last ? pt(v.last.lat, v.last.lng) : null;
+  const messPt = mess ? pt(mess.lat, mess.lng) : null;
+  const stopMarks = stops.map((x) => { const p = secPt(x.section); return p ? { ...p, kind: x.mine ? 'mine' : x.reached_at ? 'done' : 'stop', label: x.section, title: 'Section ' + x.section } as Mark : null; }).filter(Boolean) as Mark[];
+  const gMarks: Mark[] = stopMarks.length || vanPt ? [...(messPt ? [{ ...messPt, kind: 'mess', title: mess!.name } as Mark] : []), ...stopMarks, ...(vanPt ? [{ ...vanPt, kind: 'van', title: v.vehicle || 'Van' } as Mark] : [])] : [];
+  const gLine = vanPt ? [vanPt, ...stops.filter((x) => !x.reached_at).map((x) => secPt(x.section)).filter(Boolean) as { lat: number; lng: number }[]] : undefined;
   return (
     <Screen>
       <div className="map" style={{ position: 'absolute', inset: '0 0 250px 0' }}>
-        <RoadMap sections={map.sections} circles={map.circles} mine={mineId} van={v.state === 'on_the_way' ? vanKm : null} done={(secs.data || []).filter((x) => stops.some((y) => y.section === x.code && y.reached_at)).map((x) => x.id)} height={600} label="The van on the road" />
+        <GMap marks={gMarks} line={gLine} height="100%" label="Map: the van, the mess and the stops"
+          fallback={<RoadMap sections={map.sections} circles={map.circles} mine={mineId} van={v.state === 'on_the_way' ? vanKm : null} done={(secs.data || []).filter((x) => stops.some((y) => y.section === x.code && y.reached_at)).map((x) => x.id)} height={600} label="The van on the road" />} />
       </div>
       <Link className="ib" to={'/app/orders/' + id} aria-label="Back" style={{ position: 'absolute', left: 20, top: 18, boxShadow: '0 6px 16px rgba(14,27,51,.15)' }}><Icon name="chevron-left" /></Link>
       <span className="chip" style={{ position: 'absolute', left: 76, top: 25, height: 32 }}><span className="dot sf" />{ago != null ? 'Live · updated ' + (ago < 60 ? ago + ' s' : Math.round(ago / 60) + ' min') + ' ago' : 'Waiting for the van\'s place'}</span>

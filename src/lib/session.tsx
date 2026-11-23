@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { api, call, db, one, rows } from './db';
 import { doorCode } from './door';
+import { keepHr } from './hrinfo';
 
 export type Role = 'employee' | 'guest' | 'mess_owner' | 'mess_operator' | 'mess_supervisor' | 'driver' | 'site_admin' | 'accounts' | 'management' | 'system_admin';
 
@@ -97,6 +98,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           const r = await api<{ token_hash: string }>('/api/portal-signin', { ticket: decodeURIComponent(m[1]!) }, false);
           const { error } = await supabase!.auth.verifyOtp({ token_hash: r.token_hash, type: 'magiclink' });
           if (error) throw error;
+        } catch (e) { setSsoError((e as Error).message); }
+      }
+      // (23-11-2026, picture N8) opened from RCL's HR app without the FALCON app: #hrpass=<HR's pass> – no second sign-in
+      const h = location.hash.match(/hrpass=([^&]+)/);
+      if (h) {
+        history.replaceState(null, '', location.pathname + location.search);
+        try {
+          const r = await api<{ session: { access_token: string; refresh_token: string }; hr: { day: string; in: string | null } }>('/api/hr',
+            { pass: decodeURIComponent(h[1]!), device_hash: await deviceHash() }, false);
+          const { error } = await supabase!.auth.setSession(r.session);
+          if (error) throw error;
+          keepHr({ day: r.hr.day, in: r.hr.in, banner: true });
         } catch (e) { setSsoError((e as Error).message); }
       }
       const { data } = await supabase!.auth.getSession();

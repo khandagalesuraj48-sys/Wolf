@@ -1,6 +1,6 @@
 # FALCON – design inventory and screen map
 
-The approved designs (his word of 23-11-2026: "tu dilel mala design final aahet") are the 71 boards of the design canvas
+The approved designs (his word of 23-11-2026: "tu dilel mala design final aahet"; 8 more approved the same day: "ho banaw") are the 79 boards of the design canvas
 **"FALCON – app and web design"** (a private claude.ai artifact of the owner). Each board is one screen at its real size: a phone
 390 × 844, the web 1440 wide. The names and numbers on them are made-up samples – the designs stay in the private canvas and are
 not copied into this public repository.
@@ -115,6 +115,21 @@ Role: Employee (first time) · Guest
 | `g02-home` | G2 · Guest home | 390 × 844 | `/guest` | yes | yes | not yet |
 | `g03-history` | G3 · My visits and orders | 390 × 844 | `/guest/history` | yes | yes | not yet |
 
+## Next – where he is, Google Map, joined to HR – 8 screens (approved 23-11-2026: "ho banaw")
+
+Page "Next – for approval" of the same canvas. N6 and N7 are screens of the ERP phone app (`rcl-mobile`), not of FALCON.
+
+| Board | Screen | Size | Where | Approved | Built | Checked live |
+|---|---|---|---|---|---|---|
+| `n01-home-at-mess` | N1 · Home – at the mess (by itself) | 390 × 844 | `/app` (web + app) | yes | yes | not yet |
+| `n02-home-away` | N2 · Home – away from the mess (by itself) | 390 × 844 | `/app` (web + app) | yes | yes – the distance is a straight line, no road minutes (Routes API not on the key) | not yet |
+| `n03-track-gmap` | N3 · Live tracking – Google Map | 390 × 844 | `/app/orders/:id/track` | yes | yes | not yet |
+| `n04-driver-gmap` | N4 · Driver route – Google Map | 390 × 844 | `/driver/route/:section` | yes | yes – the line is straight between the stops | not yet |
+| `n05-owner-gmap` | N5 · Live deliveries – Google Map | 390 × 844 | `/owner/live` | yes | yes | not yet |
+| `n06-hr-home` | N6 · HR app Home – Mess card | 390 × 844 | rcl-mobile – HR Home | yes | rcl-mobile | not yet |
+| `n07-erp-home` | N7 · ERP app Home – Mess strip | 390 × 844 | rcl-mobile – ERP Home | yes | rcl-mobile | not yet |
+| `n08-from-hr` | N8 · FALCON opened from HR – no second sign-in | 390 × 844 | `/app` after the HR pass (web `#hrpass=`, the app's `falcon://hr`) | yes | yes | not yet |
+
 ## Assets
 
 | Asset | Used on | Format / size | Approved | Built | Note |
@@ -130,4 +145,4 @@ Role: Employee (first time) · Guest
 
 * Nothing at present (the logo: given 23-11-2026 – B).
 
-Total: 71 screens.
+Total: 79 screens (71 + the 8 of 23-11-2026).

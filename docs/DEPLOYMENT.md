@@ -44,7 +44,7 @@ piece of work.
 | `HR_FALCON_SECRET` | a long random word (24+ letters) | – | made by him; the SAME value as `FALCON_HR_SECRET` in HR's Vercel |
 | `FALCON_FIRST_ADMIN` | his WhatsApp mobile | – | makes him the first System Admin – only while FALCON has none |
 | `CRON_SECRET` | a long random value | – | made by him; Vercel's timer sends it by itself |
-| `VITE_GOOGLE_MAPS_KEY` | – | – | not used yet (decision 4) |
+| `VITE_GOOGLE_MAPS_KEY` | the ERP's Google Maps key | – | (23-11-2026, his answer: "erp chi key use kru") the SAME key as the ERP's – copied by him from Google Cloud / the ERP's Vercel, never pasted in chat. Empty = the drawn road, as before |
 
    **Preview gets no Supabase value** until a separate test Supabase project exists: a preview of a branch must never write into
    the live database. Without the values a preview opens the "not connected yet" page.
@@ -93,6 +93,20 @@ piece of work.
 4. **A mess contractor's code:** web → Mess and contractors → the contractor → "Sign-in code" (the System Admin): e.g. `SAIMESS`.
    Then People and roles → the owner / operator (name + mobile) → give "Mess owner" / "Mess operator" at that contractor's mess. Only
    those mobiles get a code with the contractor's code.
+
+## 7 · Where he is, the server's clock, Google Map, opened from HR (decision of 23-11-2026; pictures N1–N8)
+
+1. **The database first:** run `supabase/updates/2026-11-23d_hr_pass.sql` (part 0015) once – before merging the web update.
+2. **Google Map:** FALCON's Vercel → `VITE_GOOGLE_MAPS_KEY` = the ERP's Google Maps key (the same one; its APIs are already on) →
+   Redeploy. The security headers (`vercel.json`) let Google's map in. Without the key every map is the drawn road of before.
+3. **A mess's place:** web → Mess and contractors → the mess → its latitude, longitude and metres (the area that counts as "at the
+   mess"). Without them the mess home stays as before (both buttons), and nobody is told how far he is.
+4. **Opened from HR:** nothing new to set here – FALCON's `HR_FALCON_SECRET` (section 5) also checks HR's pass. In HR's Vercel:
+   `FALCON_URL` = FALCON's web address (e.g. `https://wolf-rcl-erp.vercel.app`) – HR asks FALCON for the "Mess" card there and the
+   HR / ERP app opens FALCON's web there when the FALCON app is not on the phone.
+5. **What it changes for a person:** an employee who taps "Mess" in the HR / ERP app is in FALCON at once (no company code, no
+   WhatsApp code); a new employee of HR is made in FALCON as HR says (code, name, mobile, site, designation). A person stopped in
+   FALCON stays stopped. The phone's location is read only while the mess home is open and is never saved or sent.
 
 ## Going back
 

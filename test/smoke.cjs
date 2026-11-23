@@ -92,6 +92,39 @@ const ROUTES = ['/', '/start', '/start/employee', '/start/contractor', '/start/r
     await page.close();
   }
   console.log('\n' + (ROUTES.length - bad.length) + ' of ' + ROUTES.length + ' routes rendered without an uncaught error');
+
+  // (23-11-2026) where he is, the server's clock, opened from HR (pictures N1, N2, N8) – the mess gets a place for this part
+  Object.assign(TABLES.messes[0], { lat: 18.52, lng: 73.85, radius_m: 100 });
+  TABLES.meal_windows = ['breakfast|07:30|09:30|07:00', 'lunch|12:00|14:30|11:30', 'dinner|19:30|22:00|19:00'].map((x, i) => {
+    const [meal, f, t, o] = x.split('|');
+    return { id: ID(170 + i), mess_id: ID(30), meal, serve_from: f + ':00', serve_to: t + ':00', order_by: o + ':00', change_minutes: 30, valid_from: '2026-01-01', valid_to: null };
+  });
+  const at = (hm) => new Date(T + 'T' + hm + ':00+05:30').toISOString();
+  const CASES = [
+    { name: 'at the mess, 13:00 by the server', geo: { latitude: 18.5201, longitude: 73.8501 }, clock: at('13:00'), want: ['You are at Test Mess', 'Lunch at the mess', 'Scan the counter QR', 'Inside the mess area'] },
+    { name: 'away (3.3 km), 18:00 by the server', geo: { latitude: 18.55, longitude: 73.85 }, clock: at('18:00'), want: ['km from Test Mess', 'Dinner parcel to your section', 'Ask dinner parcel', 'Directions'] },
+    { name: 'location off', geo: null, clock: at('13:00'), want: ['Location is off', 'Scan QR', 'Parcel'] },
+    { name: 'opened from HR (#hrpass)', geo: { latitude: 18.5201, longitude: 73.8501 }, clock: at('13:00'), hash: '#hrpass=made-up-pass', want: ['Signed in through RCL HR', 'Present since 08:52', 'Comes from HR by itself'] },
+  ];
+  for (const c of CASES) {
+    const cx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, ...(c.geo ? { geolocation: c.geo, permissions: ['geolocation'] } : {}) });
+    await cx.route('https://smoke.supabase.co/**', route);
+    await cx.route('wss://smoke.supabase.co/**', (r) => r.abort());
+    await cx.route('**/api/start', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, now: c.clock }) }));
+    await cx.route('**/api/hr', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, session: { access_token: jwt, refresh_token: 'r' }, hr: { day: T, in: '08:52' } }) }));
+    await cx.addInitScript((s) => { localStorage.setItem('sb-smoke-auth-token', JSON.stringify(s)); }, session);
+    const page = await cx.newPage();
+    const errs = [];
+    page.on('pageerror', (e) => errs.push('pageerror: ' + e.message));
+    await page.goto('http://127.0.0.1:4179/app' + (c.hash || ''), { waitUntil: 'networkidle', timeout: 20000 }).catch((e) => errs.push('goto: ' + e.message));
+    await page.waitForTimeout(1200);
+    const text = (await page.evaluate(() => document.body.innerText).catch(() => '')).replace(/\s+/g, ' ');
+    const missing = c.want.filter((w) => !text.includes(w));
+    if (process.env.SMOKE_SHOTS) await page.screenshot({ path: path.join(process.env.SMOKE_SHOTS, 'place_' + c.name.replace(/[^a-z0-9]+/gi, '_') + '.png') });
+    if (missing.length || errs.length) bad.push({ p: 'place: ' + c.name, errs: [...errs, ...missing.map((m) => 'not shown: ' + m)] });
+    console.log((missing.length || errs.length ? 'FAIL ' : 'ok   ') + 'place: ' + c.name);
+    await cx.close();
+  }
   for (const b of bad) console.log('\n' + b.p + '\n  ' + b.errs.join('\n  '));
   await browser.close(); server.close();
   process.exit(bad.length ? 1 : 0);
