@@ -9,8 +9,8 @@ import { day, dayLong, firstName, greeting, initials, mealIcon, mealName, MEALS,
 import { Icon } from '../ui/Icon';
 import { RoadMap, type MapSection } from '../ui/RoadMap';
 import { GMap, pt, type Mark } from '../ui/GMap';
-import { atMess, directionsUrl, distText, metres, sectionAt, usePlace } from '../lib/geo';
-import { closeHrBanner, readHr } from '../lib/hrinfo';
+import { atMess, directionsUrl, distText, isExact, metres, placeMode, sectionAt, usePlace } from '../lib/geo';
+import { readHr } from '../lib/hrinfo';
 import { Body, Btn, Denied, Empty, ErrorLine, Failed, Field, Foot, Input, Loading, Screen, Seg, Stepper, Tabs, Top, CodeBoxes } from '../ui/kit';
 import { inUse, type Dated } from '../lib/dated';
 
@@ -87,11 +87,14 @@ export function Home() {
   const messPt = mess ? pt(mess.lat, mess.lng) : null;
   const place = usePlace(Boolean(messPt));
   const [pick, setPick] = useState<'mess' | 'parcel' | null>(null);
-  const [hr, setHr] = useState(readHr);
+  const [hr] = useState(readHr);
   if (!s.me) return null;
-  const here = place.state === 'ok' && messPt && mess ? atMess(place, mess) : null;
-  const away = place.state === 'ok' && messPt ? metres(place, messPt) : null;
-  const mode = pick || (here === true ? 'mess' : here === false ? 'parcel' : null);
+  // (25-11-2026, "20 km lamb hoto but app sangat hote 5 km … ekdm perfect") only an exact reading (± 100 m) tells how far / at the mess
+  const exact = place.state === 'ok' && isExact(place), rough = place.state === 'ok' && !isExact(place);
+  const here = exact && messPt && mess ? atMess(place, mess) : null;
+  const away = exact && messPt ? metres(place, messPt) : null;
+  // (25-11-2026, "outside … at the mess option band … parcel") outside the mess area: Parcel only
+  const mode = placeMode(pick, here);
   const hrToday = hr && hr.day === today() ? hr : null;
   const meal = currentMeal(wins.data || []);
   const w = (wins.data || []).find((x) => x.meal === meal);
@@ -106,18 +109,7 @@ export function Home() {
         right={<Link className="ib" to="/app/notifications" aria-label="Notifications" style={{ position: 'relative' }}><Icon name="bell" />{(unread.data?.length || 0) > 0 && <span className="dot sf" style={{ position: 'absolute', top: 9, right: 9 }} />}</Link>} />
       <Body style={{ paddingBottom: 100 }}>
         {s.me.state === 'temporary' && <Link to="/start/temporary" className="row sm" style={{ background: 'var(--amberS)', color: 'var(--amber)', borderRadius: 14, padding: '10px 12px', gap: 8, textDecoration: 'none' }}><Icon name="clock-alert" size={16} /><span className="sp">Temporary access – waiting for the Site Admin</span><Icon name="chevron-right" size={16} /></Link>}
-        {hrToday?.banner && <>
-          <div className="row" style={{ background: 'var(--leafS)', color: 'var(--leafD)', borderRadius: 16, padding: '12px 14px', gap: 10 }}>
-            <Icon name="shield-check" />
-            <div className="sp"><b style={{ fontSize: 14 }}>Signed in through RCL HR</b><div className="xs" style={{ color: 'var(--leafD)' }}>{s.me.full_name}{s.me.rcl_id ? ' · ' + s.me.rcl_id : ''} · no code needed again</div></div>
-            <button type="button" className="ib" aria-label="Close" style={{ width: 36, height: 36, background: 'transparent', border: 0, color: 'var(--leafD)' }} onClick={() => setHr(closeHrBanner())}><Icon name="x" size={18} /></button>
-          </div>
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <b className="h2">Comes from HR by itself</b>
-            {[['id-card', 'Name, employee code, site, mobile'], ['user-check', 'Present today (HR attendance)'], ['users', 'New employee or new site in HR – in the mess too']].map(([ic, t]) =>
-              <div key={t} className="row sm"><Icon name={ic!} size={16} /><span className="sp">{t}</span><span style={{ color: 'var(--leaf)', display: 'inline-flex' }}><Icon name="check" size={16} /></span></div>)}
-          </div>
-        </>}
+        {/* (25-11-2026, his word: "signed in through RCL HR as yete te nko yeyla comes from HR by itself he nko yeyla") the two cards of HR are no more */}
         <div className="hero">
           <div className="row">
             {here === true && mess ? <span className="chip leaf" style={{ height: 26 }}><Icon name="map-pin" size={14} />You are at {mess.name}</span>
@@ -134,8 +126,11 @@ export function Home() {
           {hrToday?.in && <div className="row sm"><span style={{ color: '#7FD39A', display: 'inline-flex' }}><Icon name="user-check" size={16} /></span>Present since {hrToday.in} · from HR attendance</div>}
           {mode ? <>
             <div className="seg" role="tablist" aria-label="How" style={{ marginTop: 14, background: '#1F3354' }}>
-              {(['mess', 'parcel'] as const).map((m) => <span key={m} role="tab" tabIndex={0} aria-selected={mode === m} className={mode === m ? 'on' : ''}
-                style={{ cursor: 'pointer', ...(mode === m ? {} : { color: '#B8C3D6' }) }} onClick={() => setPick(m)} onKeyDown={(e) => e.key === 'Enter' && setPick(m)}>{m === 'mess' ? 'At the mess' : 'Parcel'}</span>)}
+              {(['mess', 'parcel'] as const).map((m) => {
+                const no = m === 'mess' && here === false;
+                return <span key={m} role="tab" tabIndex={no ? -1 : 0} aria-selected={mode === m} aria-disabled={no || undefined} className={mode === m ? 'on' : ''}
+                  style={{ cursor: no ? 'default' : 'pointer', ...(mode === m ? {} : { color: '#B8C3D6' }), opacity: no ? 0.4 : 1 }} onClick={() => !no && setPick(m)} onKeyDown={(e) => !no && e.key === 'Enter' && setPick(m)}>{m === 'mess' ? 'At the mess' : 'Parcel'}</span>;
+              })}
             </div>
             {mode === 'mess'
               ? <Btn kind="gold" to="/app/scan" style={{ marginTop: 12, height: 50, fontSize: 15 }}><Icon name="scan-line" />Scan the counter QR</Btn>
@@ -150,14 +145,14 @@ export function Home() {
         {messPt && mess && (
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <GMap height={here === true ? 118 : 200} label={'Map: you and ' + mess.name} fallback={null}
-              marks={[{ ...messPt, kind: 'mess', title: mess.name } as Mark, ...(place.state === 'ok' ? [{ lat: place.lat, lng: place.lng, kind: 'you', title: 'You' } as Mark] : [])]}
+              marks={[{ ...messPt, kind: 'mess', title: mess.name } as Mark, ...(exact ? [{ lat: place.lat, lng: place.lng, kind: 'you', title: 'You' } as Mark] : [])]}
               ring={{ center: messPt, metres: mess.radius_m || 100 }} />
             <div className="row" style={{ padding: '12px 14px' }}>
-              {place.state === 'ok' && away != null ? (here
+              {exact && away != null ? (here
                 ? <><span className="tile s40 leaf"><Icon name="circle-check" /></span><div className="sp"><b style={{ fontSize: 15 }}>Inside the mess area</b><div className="xs">{distText(away)} from the mess · by your phone's location</div></div></>
                 : <><div className="sp"><b style={{ fontSize: 15 }}>{distText(away)} away</b><div className="xs">Going to the mess? Meal at the mess comes by itself there.</div></div>
                   <a className="btn sm ghost" href={directionsUrl(messPt)} target="_blank" rel="noopener noreferrer"><Icon name="navigation" size={16} />Directions</a></>)
-                : place.state === 'asking' ? <div className="sp xs">Finding where you are…</div>
+                : place.state === 'asking' || rough ? <div className="sp xs">{rough ? 'Finding your exact place… (± ' + distText(place.acc) + ' – go into the open)' : 'Finding where you are…'}</div>
                 : <><div className="sp"><b style={{ fontSize: 15 }}>Location is off</b><div className="xs">Turn it on – the app then chooses "At the mess" or "Parcel" by itself.</div></div>
                   <Btn kind="ghost sm" onClick={place.ask}>Try again</Btn></>}
             </div>
@@ -353,12 +348,16 @@ export function Parcel() {
   const list = secs.data || [];
   const byHand = list.find((x) => x.id === pickedSection()) || null;
   const usual = list.find((x) => x.id === (visit.data?.section_id || s.me?.home_section_id)) || null;
-  const found = here.state === 'ok' ? sectionAt(here, list) : null;
+  // (25-11-2026) only an exact reading finds his section or is sent as the van's place (a rough one can be kilometres off)
+  const exact = here.state === 'ok' && isExact(here);
+  const found = exact ? sectionAt(here, list) : null;
   const to: To = byHand ? { sec: byHand, point: false, why: 'chosen by you' }
-    : here.state === 'ok' ? (found ? { sec: found, point: false, why: 'found by your location' } : { sec: null, point: true, why: 'outside the sections' })
-    : here.state === 'asking' ? { sec: null, point: false, why: '', asking: true }
+    : exact ? (found ? { sec: found, point: false, why: 'found by your location' } : { sec: null, point: true, why: 'outside the sections' })
+    : here.state === 'asking' || here.state === 'ok' ? { sec: null, point: false, why: '', asking: true }
     : usual ? { sec: usual, point: false, why: 'your work place' } : { sec: null, point: false, why: '' };
-  const away = to.point && here.state === 'ok' && mess?.lat != null && mess?.lng != null ? metres(here, { lat: Number(mess.lat), lng: Number(mess.lng) }) : null;
+  const away = to.point && exact && mess?.lat != null && mess?.lng != null ? metres(here, { lat: Number(mess.lat), lng: Number(mess.lng) }) : null;
+  // outside the mess area (an exact reading): "At the mess" cannot be chosen
+  const outside = exact && mess ? atMess(here, mess) === false : false;
   const meals = (items.data || []).find((i) => i.kind === 'meal' && i.meal === m);
   const extras = (items.data || []).filter((i) => i.kind === 'extra');
   const n = Object.values(extra).reduce((x, y) => x + y, 0);
@@ -366,7 +365,7 @@ export function Parcel() {
     if (how === 'delivery' && !to.sec && !to.point) throw new Error('Choose where to deliver.');
     const lines = [{ item: meals!.code }, ...Object.entries(extra).filter(([, k]) => k > 0).map(([code, k]) => ({ item: code, qty: k }))];
     // the location decides on the server (the same rule): his point is sent; a section by hand / his work place: the section
-    const byPoint = how === 'delivery' && !byHand && here.state === 'ok';
+    const byPoint = how === 'delivery' && !byHand && exact;
     const r = await call<{ order_id: string | null; existing: { order_id: string }[] }>('request_order', { p_mess: mess!.id, p_date: today(), p_meal: m, p_kind: how, p_lines: lines,
       p_section: how === 'delivery' && !byPoint ? to.sec!.id : null, p_note: note || null, p_visit: visit.data?.id || null,
       p_lat: byPoint ? Number(here.lat.toFixed(6)) : null, p_lng: byPoint ? Number(here.lng.toFixed(6)) : null });
@@ -377,7 +376,7 @@ export function Parcel() {
     <Screen>
       <Top back={true} title={mealName(m) + ' parcel'} sub={w ? 'Order by ' + hm(w.order_by) : 'No parcels for this meal'} />
       <Body style={{ paddingBottom: 12 }}>
-        <Seg value="parcel" options={[{ v: 'meal', label: 'At the mess' }, { v: 'parcel', label: 'Parcel to my site' }]} onChange={(v) => v === 'meal' && nav('/app/meal')} />
+        <Seg value="parcel" options={[{ v: 'meal', label: 'At the mess' }, { v: 'parcel', label: 'Parcel to my site' }]} off={outside ? ['meal'] : []} onChange={(v) => v === 'meal' && nav('/app/meal')} />
         <div className="row" style={{ gap: 6 }}>{MEALS.map((x) => <button key={x} className={'chip' + (x === m ? ' on' : '')} onClick={() => setMeal(x)}>{mealName(x)}</button>)}</div>
         {how === 'delivery' && <Link className="card" to="/app/section" style={{ display: 'flex', gap: 12, alignItems: 'center', textDecoration: 'none', color: 'inherit' }}>
           <div className={'tile ' + (to.point ? 'blue' : 'navy')}><Icon name={to.point ? 'locate-fixed' : 'map-pin'} size={22} /></div>
