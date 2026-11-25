@@ -8,7 +8,8 @@ import { day, dayLong, inr, initials, leftText, maskMobile, mealIcon, mealName, 
 import { Icon } from '../ui/Icon';
 import { RoadMap } from '../ui/RoadMap';
 import { GMap, pt, type Mark } from '../ui/GMap';
-import { directionsUrl, distText, metres } from '../lib/geo';
+import { directionsUrl, metres } from '../lib/geo';
+import { RoadText } from '../lib/road';
 import { Body, Btn, Denied, Empty, ErrorLine, Failed, Field, Foot, Input, Loading, Screen, Seg, Sheet, Tabs, Top } from '../ui/kit';
 
 export const OWNER_TABS = [
@@ -25,8 +26,15 @@ interface KOrder { id: string; code: string; kind: 'meal' | 'parcel' | 'delivery
 // (0017, his word: "only section … section che baheun koni kel asel tr … location direction he sagle hot jail") a van order goes to a
 // section or – asked from outside every section – to the person's location: the kitchen sees how far it is and Google's directions.
 const where = (o: KOrder) => o.section?.code || (o.point ? 'Location' : null);
-const farOf = (o: KOrder, mess: { lat: number | null; lng: number | null } | null | undefined) =>
-  o.point && mess?.lat != null && mess?.lng != null ? distText(metres({ lat: Number(mess.lat), lng: Number(mess.lng) }, { lat: Number(o.point.lat), lng: Number(o.point.lng) })) : null;
+// (25-11-2026, his word: FALCON said 5.9 km, Google Maps 12 km) how far BY ROAD from the mess (lib/road.tsx) – the straight line only
+// until the road is there, said as one
+type MessAt = { lat: number | null; lng: number | null } | null | undefined;
+const messPtOf = (mess: MessAt) => (mess?.lat != null && mess?.lng != null ? { lat: Number(mess.lat), lng: Number(mess.lng) } : null);
+const far = (o: KOrder, mess: MessAt) => Boolean(o.point && messPtOf(mess));
+function Far({ o, mess }: { o: KOrder; mess: MessAt }) {
+  const a = messPtOf(mess), b = o.point ? { lat: Number(o.point.lat), lng: Number(o.point.lng) } : null;
+  return a && b ? <RoadText from={a} to={b} straight={metres(a, b)} /> : null;
+}
 function Directions({ to, label = 'Directions' }: { to: { lat: number; lng: number }; label?: string }) {
   return <a className="chip" href={directionsUrl({ lat: Number(to.lat), lng: Number(to.lng) })} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ height: 28, textDecoration: 'none' }}><Icon name="navigation" size={14} />{label}</a>;
 }
@@ -134,7 +142,7 @@ export function Requests() {
                 const open = o.change_until && new Date(o.change_until) > new Date();
                 return <div key={o.id} className="card" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10, ...(o.guest ? { borderColor: '#C9D7F2' } : {}) }}>
                   <Link to={'/owner/requests/' + o.id} className="row" style={{ textDecoration: 'none', color: 'inherit' }}><div className={'av ' + (o.guest ? 'plum' : '')}>{initials(o.requester)}</div>
-                    <div className="sp"><b style={{ fontSize: 15 }}>{o.requester}{o.guest && <span className="tag" style={{ background: 'var(--plumS)', color: '#5B2BA0', marginLeft: 6 }}>Guest</span>}{o.is_group && <span className="tag" style={{ marginLeft: 6 }}>Group · {o.lines.filter((l) => l.is_meal).length}</span>}</b><div className="xs">{o.requester_role || ''}{o.section ? ' · ' + o.section.code + (o.section.km != null ? ' Km ' + o.section.km : '') : o.point ? ' · Location' + (farOf(o, mess) ? ', ' + farOf(o, mess) + ' from the mess' : '') : ''}</div></div>
+                    <div className="sp"><b style={{ fontSize: 15 }}>{o.requester}{o.guest && <span className="tag" style={{ background: 'var(--plumS)', color: '#5B2BA0', marginLeft: 6 }}>Guest</span>}{o.is_group && <span className="tag" style={{ marginLeft: 6 }}>Group · {o.lines.filter((l) => l.is_meal).length}</span>}</b><div className="xs">{o.requester_role || ''}{o.section ? ' · ' + o.section.code + (o.section.km != null ? ' Km ' + o.section.km : '') : o.point ? <> · Location{far(o, mess) && <>, <Far o={o} mess={mess} /> from the mess</>}</> : ''}</div></div>
                     <span className={'chip ' + (open ? 'amber' : '')} style={{ height: 26 }}>{open ? <><Icon name="timer" size={14} />{leftText(o.change_until!)}</> : 'Ready'}</span></Link>
                   <div className="row sm" style={{ gap: 8 }}><Icon name={o.kind === 'meal' ? 'utensils' : 'package'} size={16} /><span className="sp">{mealName(o.meal)} {o.kind === 'meal' ? 'at the mess' : 'parcel'} · {itemsText(o)}</span><span className="tag">{o.code}</span></div>
                   {extras.map((x) => <div key={x.id} className="row" style={{ gap: 8 }}><span className="sp xs">Extra: <b style={{ color: 'var(--sfD)' }}>{x.item} {x.qty}</b></span>
@@ -180,7 +188,7 @@ export function RequestDetail() {
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {o.lines.map((l) => <div className="row" key={l.id}><span className="sp" style={{ fontSize: 15, ...(l.state === 'cancelled' ? { textDecoration: 'line-through', color: 'var(--muted)' } : {}) }}>{l.item}{o.is_group ? ' · ' + l.person : ''}</span><b>{l.qty}</b></div>)}
           <div className="hr" />
-          <div className="row sm"><Icon name={o.point ? 'locate-fixed' : 'map-pin'} size={16} /><span className="sp">{o.section ? o.section.code + (o.section.place ? ' ' + o.section.place : '') + ' · with the van' : o.point ? 'His location – outside the sections' + (farOf(o, mess) ? ' · ' + farOf(o, mess) + ' from the mess' : '') + ' · with the van' : o.kind === 'parcel' ? 'Collected at the mess' : 'At the mess'}</span>
+          <div className="row sm"><Icon name={o.point ? 'locate-fixed' : 'map-pin'} size={16} /><span className="sp">{o.section ? o.section.code + (o.section.place ? ' ' + o.section.place : '') + ' · with the van' : o.point ? <>His location – outside the sections{far(o, mess) && <> · <Far o={o} mess={mess} /> from the mess</>} · with the van</> : o.kind === 'parcel' ? 'Collected at the mess' : 'At the mess'}</span>
             {o.point && <Directions to={o.point} />}</div>
           {o.note && <div className="row sm"><Icon name="message-circle" size={16} /><span className="sp">{o.note}</span></div>}
         </div>
@@ -290,7 +298,7 @@ export function Parcels() {
           </div>}
           {pts.length > 0 && <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <div className="row" style={{ padding: '14px 16px', background: 'var(--blueS)' }}><span style={{ width: 24, height: 24, borderRadius: 7, background: 'var(--blue)', color: '#fff', display: 'grid', placeItems: 'center' }}><Icon name="locate-fixed" size={14} /></span><b className="sp">Outside the sections · their locations</b><b>{pts.length}</b></div>
-            {pts.map((o, i) => row('p-' + o.id, i, pts.length, <span className="sp">{o.requester}{farOf(o, mess) ? ' · ' + farOf(o, mess) + ' from the mess' : ''} · {o.code}{left['p-' + o.id] ? ' · next van' : ''}</span>,
+            {pts.map((o, i) => row('p-' + o.id, i, pts.length, <span className="sp">{o.requester}{far(o, mess) && <> · <Far o={o} mess={mess} /> from the mess</>} · {o.code}{left['p-' + o.id] ? ' · next van' : ''}</span>,
               <Directions to={o.point!} />))}
           </div>}
         </>}

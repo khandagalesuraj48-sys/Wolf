@@ -46,3 +46,15 @@ describe('the place: exact readings only; outside the mess – Parcel only', () 
     expect([placeMode(null, null), placeMode('mess', null)]).toEqual([null, 'mess']);
   });
 });
+
+// (25-11-2026) the distance by road – the words
+import { minutesText, roadLabel } from './road';
+describe('the road in words', () => {
+  it('by road with the minutes; without the road: the straight line, said as one', () => {
+    expect(roadLabel({ metres: 12034, seconds: 1820 }, 5900)).toBe('12 km by road · 30 min');
+    expect(roadLabel({ metres: 850, seconds: null }, 600)).toBe('850 m by road');
+    expect(roadLabel(undefined, 5900)).toBe('5.9 km in a straight line');
+    expect(roadLabel(null, null)).toBe('');
+    expect([minutesText(20), minutesText(3700)]).toEqual(['1 min', '1 h 02 min']);
+  });
+});

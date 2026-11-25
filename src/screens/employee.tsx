@@ -10,6 +10,7 @@ import { Icon } from '../ui/Icon';
 import { RoadMap, type MapSection } from '../ui/RoadMap';
 import { GMap, pt, type Mark } from '../ui/GMap';
 import { atMess, directionsUrl, distText, isExact, metres, placeMode, sectionAt, usePlace } from '../lib/geo';
+import { roadLabel, RoadText, useRoad } from '../lib/road';
 import { readHr } from '../lib/hrinfo';
 import { Body, Btn, Denied, Empty, ErrorLine, Failed, Field, Foot, Input, Loading, Screen, Seg, Stepper, Tabs, Top, CodeBoxes } from '../ui/kit';
 import { inUse, type Dated } from '../lib/dated';
@@ -88,6 +89,9 @@ export function Home() {
   const place = usePlace(Boolean(messPt));
   const [pick, setPick] = useState<'mess' | 'parcel' | null>(null);
   const [hr] = useState(readHr);
+  // (25-11-2026, his word: FALCON said 5.9 km, Google Maps 12 km – "fake imformation") how far BY ROAD (lib/road.tsx)
+  const youPt = place.state === 'ok' && isExact(place) ? { lat: place.lat, lng: place.lng } : null;
+  const road = useRoad(youPt, messPt);
   if (!s.me) return null;
   // (25-11-2026, "20 km lamb hoto but app sangat hote 5 km … ekdm perfect") only an exact reading (± 100 m) tells how far / at the mess
   const exact = place.state === 'ok' && isExact(place), rough = place.state === 'ok' && !isExact(place);
@@ -113,7 +117,7 @@ export function Home() {
         <div className="hero">
           <div className="row">
             {here === true && mess ? <span className="chip leaf" style={{ height: 26 }}><Icon name="map-pin" size={14} />You are at {mess.name}</span>
-              : here === false && mess && away != null ? <span className="chip sf" style={{ height: 26 }}><Icon name="route" size={14} />{distText(away)} from {mess.name}</span>
+              : here === false && mess && away != null ? <span className="chip sf" style={{ height: 26 }}><Icon name="route" size={14} />{road ? distText(road.metres) + ' by road' : distText(away) + ' in a straight line'} from {mess.name}</span>
               : <span className="chip sf" style={{ height: 26 }}>{mealName(meal)} · {st.open ? 'open ' + st.label : st.label}</span>}
             <span className="sp" /><span className="xs">{mode ? nowHM() : dayLong(today())}</span>
           </div>
@@ -150,7 +154,7 @@ export function Home() {
             <div className="row" style={{ padding: '12px 14px' }}>
               {exact && away != null ? (here
                 ? <><span className="tile s40 leaf"><Icon name="circle-check" /></span><div className="sp"><b style={{ fontSize: 15 }}>Inside the mess area</b><div className="xs">{distText(away)} from the mess · by your phone's location</div></div></>
-                : <><div className="sp"><b style={{ fontSize: 15 }}>{distText(away)} away</b><div className="xs">Going to the mess? Meal at the mess comes by itself there.</div></div>
+                : <><div className="sp"><b style={{ fontSize: 15 }}>{roadLabel(road, away)}</b><div className="xs">Going to the mess? Meal at the mess comes by itself there.</div></div>
                   <a className="btn sm ghost" href={directionsUrl(messPt)} target="_blank" rel="noopener noreferrer"><Icon name="navigation" size={16} />Directions</a></>)
                 : place.state === 'asking' || rough ? <div className="sp xs">{rough ? 'Finding your exact place… (± ' + distText(place.acc) + ' – go into the open)' : 'Finding where you are…'}</div>
                 : <><div className="sp"><b style={{ fontSize: 15 }}>Location is off</b><div className="xs">Turn it on – the app then chooses "At the mess" or "Parcel" by itself.</div></div>
@@ -382,7 +386,7 @@ export function Parcel() {
           <div className={'tile ' + (to.point ? 'blue' : 'navy')}><Icon name={to.point ? 'locate-fixed' : 'map-pin'} size={22} /></div>
           <div className="sp"><span className="xs">Deliver to{to.why ? ' · ' + to.why : ''}</span>
             <b style={{ display: 'block', fontSize: 15, marginTop: 2 }}>{to.sec ? 'Section ' + to.sec.code + (to.sec.name && to.sec.name !== to.sec.code ? ' – ' + to.sec.name : '') : to.point ? 'Your location' : to.asking ? 'Finding where you are…' : 'Choose the section'}</b>
-            <div className="sm">{to.sec ? [to.sec.km != null ? 'Km ' + to.sec.km : '', to.sec.place || ''].filter(Boolean).join(' · ') || ' ' : to.point ? (away != null ? distText(away) + ' from the mess · ' : '') + 'the van brings it here' : here.state === 'off' ? 'Location is off – choose the section' : ' '}</div></div>
+            <div className="sm">{to.sec ? [to.sec.km != null ? 'Km ' + to.sec.km : '', to.sec.place || ''].filter(Boolean).join(' · ') || ' ' : to.point ? <>{away != null && mess?.lat != null && mess?.lng != null && here.state === 'ok' ? <><RoadText from={{ lat: Number(mess.lat), lng: Number(mess.lng) }} to={{ lat: here.lat, lng: here.lng }} straight={away} /> from the mess · </> : ''}the van brings it here</> : here.state === 'off' ? 'Location is off – choose the section' : ' '}</div></div>
           <span className="sm" style={{ color: 'var(--leafD)', fontWeight: 600 }}>Change</span>
         </Link>}
         {how === 'delivery' && to.point && <div className="row xs" style={{ gap: 8 }}><Icon name="info" size={14} /><span className="sp">You are outside every section. Your location goes with this order only – for the van's directions.</span></div>}
