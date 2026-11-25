@@ -145,3 +145,14 @@ Every decision here is the owner's. The newest wins. Nothing is built that is no
 4. ~~**Maps**~~ – decided 23-11-2026: Google Maps with the ERP's key (above). Still open: road time / route along the road (Routes API).
 5. ~~**The FALCON logo**~~ – decided 23-11-2026: B (above).
 6. **"Posted in the ERP":** which ledger a paid bill goes to.
+
+## The distance by road (25-11-2026)
+His word, with two pictures (FALCON "5.9 km away", Google Maps 12 km / 31 min): "direction war click kel 12 km ale he as ka problem udya
+aple live tracking map madhun honar aahe van nighali kuthe aahe employee kuth ahe parcel kase deyche te sagle ani app ase ase fake
+imformation denare tr kahich thik nahi chalnar". Both points were right; the app showed the straight line. Now every distance to the mess
+/ a delivery point is BY ROAD from Google's Routes API (driving, without live traffic – the "Essentials" kind) through FALCON's server
+(`api/route`, key `GOOGLE_ROUTES_KEY` in Vercel only): "12 km by road · 30 min". Until the road is there – or without the key – the
+straight line is shown and said as one: "5.9 km in a straight line". To Google go the two points only (his rounded to about 100 m); the
+server keeps an answer 10 minutes in memory and nothing else; at most 60 questions a person in 10 minutes. Google's price for India
+(25-11-2026): 70,000 a month free, then USD 1.50 a thousand.
+
