@@ -142,8 +142,13 @@ export function CodeBoxes({ value, onChange, length = 6 }: { value: string; onCh
   );
 }
 
-export function Seg<T extends string>({ value, options, onChange }: { value: T; options: { v: T; label: string }[]; onChange: (v: T) => void }) {
-  return <div className="seg" role="tablist">{options.map((o) => <span key={o.v} role="tab" aria-selected={o.v === value} tabIndex={0} className={o.v === value ? 'on' : ''} onClick={() => onChange(o.v)} onKeyDown={(e) => e.key === 'Enter' && onChange(o.v)} style={{ cursor: 'pointer' }}>{o.label}</span>)}</div>;
+// (25-11-2026) [off]: the values that cannot be chosen now – dim, a touch does nothing
+export function Seg<T extends string>({ value, options, onChange, off = [] }: { value: T; options: { v: T; label: string }[]; onChange: (v: T) => void; off?: T[] }) {
+  return <div className="seg" role="tablist">{options.map((o) => {
+    const no = off.includes(o.v);
+    return <span key={o.v} role="tab" aria-selected={o.v === value} aria-disabled={no || undefined} tabIndex={no ? -1 : 0} className={o.v === value ? 'on' : ''}
+      onClick={() => !no && onChange(o.v)} onKeyDown={(e) => !no && e.key === 'Enter' && onChange(o.v)} style={{ cursor: no ? 'default' : 'pointer', opacity: no ? 0.4 : 1 }}>{o.label}</span>;
+  })}</div>;
 }
 
 export function Stepper({ value, onChange, min = 0, max = 20 }: { value: number; onChange: (n: number) => void; min?: number; max?: number }) {

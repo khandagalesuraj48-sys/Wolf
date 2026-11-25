@@ -24,3 +24,25 @@ describe('the section of a point', () => {
     expect(sectionAt({ lat: 19.1, lng: 73 }, secs)).toBeNull();
   });
 });
+
+// (25-11-2026, his words: "20 km lamb hoto but app sangat hote 5 km … ekdm perfect"; "outside … at the mess option band … parcel")
+import { isExact, placeMode, placeTakes, PLACE_EXACT } from './geo';
+describe('the place: exact readings only; outside the mess – Parcel only', () => {
+  it('a reading is exact within 100 m; a tower reading (kilometres) is not', () => {
+    expect(PLACE_EXACT).toBe(100);
+    expect(isExact({ state: 'ok', lat: 19, lng: 73, acc: 12 })).toBe(true);
+    expect(isExact({ state: 'ok', lat: 19, lng: 73, acc: 3000 })).toBe(false);
+    expect(isExact({ state: 'asking' })).toBe(false);
+  });
+  it('a rough reading does not push out an exact one of the last 30 s', () => {
+    expect(placeTakes(false, 0, 3000, 1000)).toBe(true);
+    expect(placeTakes(true, 0, 3000, 5000)).toBe(false);
+    expect(placeTakes(true, 0, 12, 5000)).toBe(true);
+    expect(placeTakes(true, 0, 3000, 31000)).toBe(true);
+  });
+  it('outside: Parcel whatever was chosen; at the mess: the mess unless Parcel; not known: the choice', () => {
+    expect([placeMode(null, false), placeMode('mess', false)]).toEqual(['parcel', 'parcel']);
+    expect([placeMode(null, true), placeMode('parcel', true)]).toEqual(['mess', 'parcel']);
+    expect([placeMode(null, null), placeMode('mess', null)]).toEqual([null, 'mess']);
+  });
+});

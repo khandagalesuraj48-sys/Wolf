@@ -3,11 +3,25 @@
 // screen that needs it is open. It leaves the phone only with a van order (23-11-2026, his word: "only section … section che baheun
 // koni kel asel tr … location direction he sagle hot jail"): the server finds the section whose area holds it, and keeps the point
 // with that order only when it is inside no section – for the kitchen's and the driver's directions. Nothing else of it is sent.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export interface Pt { lat: number; lng: number }
 export interface Place extends Pt { acc: number }
 export type PlaceState = { state: 'asking' } | { state: 'off'; why: 'denied' | 'none' } | ({ state: 'ok' } & Place);
+
+// (25-11-2026, his word: "kal pahile mess pasun 20 km lamb hoto but app sangat hote 5 km … ekdm perfect") a reading is EXACT within this
+// many metres – a reading by the mobile towers alone (indoors, no GPS yet) can be kilometres off. Only an exact reading tells how far the
+// mess is, whether he is at it, his section or the van's point; a rough one only says "finding your exact place (± …)". As the phone app.
+export const PLACE_EXACT = 100;
+export const isExact = (p: PlaceState): boolean => p.state === 'ok' && p.acc >= 0 && p.acc <= PLACE_EXACT;
+
+// A new reading of [acc] m is taken – unless the one there is exact and of the last 30 s and the new one is not exact.
+export const placeTakes = (wasExact: boolean, atMs: number, acc: number, nowMs: number) => !wasExact || (acc >= 0 && acc <= PLACE_EXACT) || nowMs - atMs > 30000;
+
+// (25-11-2026, his word: "jar mi outside asel mess pasun at the mess option band asel tyala parcel gheyla lagel") "At the mess" or
+// "Parcel": outside the mess area (an exact reading) Parcel only, whatever he chose; at it, the mess unless he chose Parcel.
+export const placeMode = (pick: 'mess' | 'parcel' | null, here: boolean | null): 'mess' | 'parcel' | null =>
+  here === false ? 'parcel' : pick || (here === true ? 'mess' : null);
 
 // metres between two points (the straight line – the road may be longer)
 export function metres(a: Pt, b: Pt): number {
@@ -43,13 +57,20 @@ export const directionsUrl = (p: Pt) => 'https://www.google.com/maps/dir/?api=1&
 export function usePlace(on = true): PlaceState & { ask: () => void } {
   const [st, setSt] = useState<PlaceState>({ state: 'asking' });
   const [tick, setTick] = useState(0);
+  const last = useRef({ exact: false, at: 0 });
   useEffect(() => {
     if (!on) return;
     if (typeof navigator === 'undefined' || !navigator.geolocation) { setSt({ state: 'off', why: 'none' }); return; }
     const id = navigator.geolocation.watchPosition(
-      (p) => setSt({ state: 'ok', lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy || 0) }),
+      (p) => {
+        const acc = Math.round(p.coords.accuracy || 0), now = Date.now();
+        // (25-11-2026) a rough reading does not push out an exact one of the last 30 s
+        if (!placeTakes(last.current.exact, last.current.at, acc, now)) return;
+        last.current = { exact: acc >= 0 && acc <= PLACE_EXACT, at: now };
+        setSt({ state: 'ok', lat: p.coords.latitude, lng: p.coords.longitude, acc });
+      },
       (e) => setSt({ state: 'off', why: e.code === 1 ? 'denied' : 'none' }),
-      { enableHighAccuracy: true, maximumAge: 30000, timeout: 20000 });
+      { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 });
     return () => navigator.geolocation.clearWatch(id);
   }, [on, tick]);
   return { ...st, ask: () => { setSt({ state: 'asking' }); setTick((x) => x + 1); } };
